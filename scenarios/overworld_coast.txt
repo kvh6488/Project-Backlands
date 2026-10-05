@@ -1,0 +1,14 @@
+# Seed 1's nearest coast: a sand spit with High Tides' foam edge, water on
+# three sides and forest behind. Exercises the coast autotiling (every corner
+# shape, including both diagonals) and beach palms. Two checkpoints 0.5 s
+# apart land on different foam animation frames.
+seed 1
+world overworld
+window 1280 720
+scale 1.5
+spawn 1146 2118
+
+checkpoint spit
+hold W 30
+checkpoint spit_later
+end

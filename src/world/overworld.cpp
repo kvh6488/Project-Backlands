@@ -33,7 +33,7 @@ PropType Overworld::rollProp(Biome b, int x, int y, uint8_t &variant) const {
       /* OCEAN     */ {},
       /* LAKE      */ {},
       /* RIVER     */ {},
-      /* BEACH     */ {{PropType::ROCK, 0.03f}},
+      /* BEACH     */ {{PropType::TREE, 0.04f}, {PropType::ROCK, 0.03f}},
       /* GRASSLAND */ {{PropType::TREE, 0.07f}, {PropType::BUSH, 0.10f},
                        {PropType::ROCK, 0.02f}},
       /* FOREST    */ {{PropType::TREE, 0.70f}, {PropType::BUSH, 0.10f}},
@@ -44,7 +44,7 @@ PropType Overworld::rollProp(Biome b, int x, int y, uint8_t &variant) const {
   };
   uint32_t seed = m_island.seed();
   float roll = noise::unit(x, y, seed ^ 0x7a3e11c5u);
-  variant = (uint8_t)(noise::hash(x, y, seed ^ 0x1b873593u) & 3u);
+  variant = (uint8_t)(noise::hash(x, y, seed ^ 0x1b873593u) & 0xffu);
   for (const Odds &o : kTable[(int)b]) {
     if (roll < o.chance)
       return o.type;

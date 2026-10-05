@@ -32,7 +32,9 @@ struct Prop {
   int x, y;      // tile, wrapped into the world
   float px, py;  // the Poisson point it grew from, in world tiles
   PropType type;
-  uint8_t variant; // which sprite of its kind, 0-3
+  // A per-tile hash byte. The renderer turns it into a sprite (which species,
+  // which size), so the world never names a picture.
+  uint8_t variant;
 };
 
 // ============================================================================

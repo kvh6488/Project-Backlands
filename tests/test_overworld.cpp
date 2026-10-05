@@ -1,5 +1,6 @@
 #include "entities/player.hpp"
 #include "items/item_database.hpp"
+#include "render/overworld_renderer.hpp"
 #include "world/generators/poisson.hpp"
 #include "world/noise.hpp"
 #include "world/overworld.hpp"
@@ -304,4 +305,72 @@ TEST(OverworldTest, PlayerIsStoppedByATree) {
     player.update(w, 1.0f / 60.0f, right);
   EXPECT_LE(player.getPosition().x, treeLeft - 9.0f); // radius 10, minus rounding
   EXPECT_GT(player.getPosition().x, treeLeft - 20.0f) << "it should have walked up to it";
+}
+
+// ---------------------------------------------------------------------------
+// OverworldRenderer: the pure parts (no window, no textures)
+// ---------------------------------------------------------------------------
+TEST(OverworldRendererTest, CornerMaskBitsAreTlTrBlBr) {
+  EXPECT_EQ(OverworldRenderer::cornerMask(false, false, false, false), 0);
+  EXPECT_EQ(OverworldRenderer::cornerMask(true, false, false, false), 8);
+  EXPECT_EQ(OverworldRenderer::cornerMask(false, true, false, false), 4);
+  EXPECT_EQ(OverworldRenderer::cornerMask(false, false, true, false), 2);
+  EXPECT_EQ(OverworldRenderer::cornerMask(false, false, false, true), 1);
+  EXPECT_EQ(OverworldRenderer::cornerMask(true, true, true, true), 15);
+}
+
+TEST(OverworldRendererTest, EveryPropKindHasASpriteInEveryLandBiome) {
+  for (PropType t : {PropType::TREE, PropType::PINE, PropType::BUSH,
+                     PropType::ROCK, PropType::REEDS})
+    for (int b = (int)Biome::BEACH; b < (int)Biome::COUNT; ++b)
+      for (int v = 0; v < 256; ++v)
+        ASSERT_LT(OverworldRenderer::spriteFor(t, (Biome)b, (uint8_t)v),
+                  owsprite::COUNT)
+            << propId(t) << " in " << biomeId((Biome)b);
+  EXPECT_EQ(OverworldRenderer::spriteFor(PropType::NONE, Biome::FOREST, 0),
+            owsprite::COUNT);
+}
+
+TEST(OverworldRendererTest, SpeciesFollowTheBiome) {
+  using namespace owsprite;
+  for (int v = 0; v < 256; ++v) {
+    Id palm = OverworldRenderer::spriteFor(PropType::TREE, Biome::BEACH, (uint8_t)v);
+    EXPECT_TRUE(palm == PALM_TALL || palm == PALM_SHORT);
+    Id willow = OverworldRenderer::spriteFor(PropType::TREE, Biome::WETLAND, (uint8_t)v);
+    EXPECT_TRUE(willow >= WILLOW_LIT && willow <= WILLOW_S_C);
+  }
+}
+
+// Full-orange autumn waits for Phase 5's seasons; only the light-brown
+// autumn trees may appear now.
+TEST(OverworldRendererTest, FullOrangeAutumnTreesAreHeldBack) {
+  using namespace owsprite;
+  const Id heldBack[] = {OAK_AUTUMN_A,   OAK_AUTUMN_B,   BIRCH_AUTUMN_A,
+                         BIRCH_AUTUMN_B, PC1_S2_ORANGE,  PC1_S3_ORANGE,
+                         PC1_S4_ORANGE,  PC1_S5_ORANGE,  PC1_S2_AMBER,
+                         PC1_S3_AMBER,   PC1_S4_AMBER,   PC1_S5_AMBER,
+                         PC3_S2_RUST,    PC3_S3_RUST,    PC3_S4_RUST,
+                         PC3_S5_RUST};
+  for (PropType t : {PropType::TREE, PropType::PINE})
+    for (int b = (int)Biome::BEACH; b < (int)Biome::COUNT; ++b)
+      for (int v = 0; v < 256; ++v) {
+        Id id = OverworldRenderer::spriteFor(t, (Biome)b, (uint8_t)v);
+        for (Id h : heldBack)
+          ASSERT_NE(id, h) << biomeId((Biome)b);
+      }
+}
+
+TEST(OverworldRendererTest, SpriteFramesDoNotOverlapInTheAtlas) {
+  using owsprite::kFrames;
+  for (int i = 0; i < owsprite::COUNT; ++i) {
+    ASSERT_GT(kFrames[i].w, 0);
+    ASSERT_GT(kFrames[i].h, 0);
+    ASSERT_LE(kFrames[i].h, owsprite::kTallestTiles);
+    for (int j = i + 1; j < owsprite::COUNT; ++j) {
+      const auto &a = kFrames[i], &b = kFrames[j];
+      bool apart = a.col + a.w <= b.col || b.col + b.w <= a.col ||
+                   a.row + a.h <= b.row || b.row + b.h <= a.row;
+      ASSERT_TRUE(apart) << i << " overlaps " << j;
+    }
+  }
 }

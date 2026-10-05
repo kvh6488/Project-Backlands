@@ -45,6 +45,7 @@ void OverworldState::regenerate(unsigned int seed) {
 void OverworldState::onEnter() {
   m_itemRenderer.loadTextures();
   m_playerRenderer.loadTextures();
+  m_renderer.loadTextures();
   placePlayer();
   updateCamera();
   m_screenTarget = LoadRenderTexture(m_canvas.width, m_canvas.height);
@@ -147,13 +148,17 @@ void OverworldState::render(const InputState &in) {
   BeginTextureMode(m_screenTarget);
   ClearBackground(theme::ocean);
   BeginMode2D(m_camera);
-  m_renderer.renderTerrain(m_world, m_camera, m_canvas);
+  m_renderer.renderTerrain(m_world, m_camera, m_canvas, m_totalTime);
 
   ViewBounds view = ViewBounds::fromCamera(m_world, m_camera, m_canvas);
-  m_drawQueue.begin(view.minBaseY(grid::CELL), view.maxBaseY(grid::CELL));
+  // Props rooted below the screen still reach up into it.
+  m_drawQueue.begin(view.minBaseY(grid::CELL),
+                    view.maxBaseY(grid::CELL) +
+                        OverworldRenderer::kReachBelowTiles * grid::CELL);
   m_playerRenderer.collect(m_player, m_drawQueue);
   m_itemRenderer.collect(m_world, m_camera, m_canvas, AreaState::ROOM,
                          m_drawQueue);
+  m_renderer.setFocus(m_player.getPosition());
   m_renderer.collect(m_world, m_camera, m_canvas, m_drawQueue);
   m_drawQueue.flush();
   EndMode2D();
