@@ -1,0 +1,307 @@
+#include "entities/player.hpp"
+#include "items/item_database.hpp"
+#include "world/generators/poisson.hpp"
+#include "world/noise.hpp"
+#include "world/overworld.hpp"
+#include <gtest/gtest.h>
+#include <cmath>
+#include <memory>
+
+// Island generation costs ~0.5 s in a Debug build, so the suites share one
+// world per seed rather than building it per test.
+namespace {
+constexpr uint32_t kSeed = 1;
+
+const Overworld &sharedWorld() {
+  static std::unique_ptr<Overworld> world = std::make_unique<Overworld>(kSeed);
+  return *world;
+}
+} // namespace
+
+// ---------------------------------------------------------------------------
+// Noise
+// ---------------------------------------------------------------------------
+TEST(NoiseTest, IsAPureFunctionOfItsInputs) {
+  EXPECT_EQ(noise::gradient(12.3f, -4.5f, 7), noise::gradient(12.3f, -4.5f, 7));
+  EXPECT_NE(noise::gradient(12.3f, -4.5f, 7), noise::gradient(12.3f, -4.5f, 8));
+  EXPECT_EQ(noise::hash(3, 4, 9), noise::hash(3, 4, 9));
+  EXPECT_NE(noise::hash(3, 4, 9), noise::hash(4, 3, 9)); // axes not symmetric
+}
+
+TEST(NoiseTest, GradientNoiseIsZeroOnTheLatticeAndBounded) {
+  for (int i = -20; i < 20; ++i)
+    EXPECT_FLOAT_EQ(noise::gradient((float)i, (float)(i * 3), 5), 0.0f);
+  float lo = 0.0f, hi = 0.0f;
+  for (int y = 0; y < 200; ++y) {
+    for (int x = 0; x < 200; ++x) {
+      float v = noise::fbm(x * 0.137f, y * 0.071f, 11, 5);
+      lo = std::min(lo, v);
+      hi = std::max(hi, v);
+      float r = noise::ridged(x * 0.137f, y * 0.071f, 11, 4);
+      ASSERT_GE(r, 0.0f);
+      ASSERT_LE(r, 1.0f);
+    }
+  }
+  EXPECT_GE(lo, -1.05f);
+  EXPECT_LE(hi, 1.05f);
+  EXPECT_LT(lo, -0.3f) << "fbm should actually vary";
+  EXPECT_GT(hi, 0.3f);
+}
+
+// ---------------------------------------------------------------------------
+// Poisson-disc sampling
+// ---------------------------------------------------------------------------
+TEST(PoissonTest, KeepsMinimumSpacingAndStaysInBounds) {
+  const float r = 2.0f;
+  auto pts = poisson::sample(32.0f, 32.0f, r, 1234);
+  ASSERT_GT(pts.size(), 100u) << "a 32x32 square at r=2 holds ~150 points";
+  for (size_t i = 0; i < pts.size(); ++i) {
+    EXPECT_GE(pts[i].x, 0.0f);
+    EXPECT_LT(pts[i].x, 32.0f);
+    for (size_t j = i + 1; j < pts.size(); ++j) {
+      float dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y;
+      ASSERT_GE(dx * dx + dy * dy, r * r);
+    }
+  }
+  auto again = poisson::sample(32.0f, 32.0f, r, 1234);
+  ASSERT_EQ(pts.size(), again.size());
+  EXPECT_EQ(pts.back().x, again.back().x);
+}
+
+// ---------------------------------------------------------------------------
+// Island: shape, spawn, hydrology
+// ---------------------------------------------------------------------------
+TEST(IslandTest, SameSeedSameIsland) {
+  const Island &a = sharedWorld().island();
+  Island b(kSeed);
+  EXPECT_EQ(a.map().height, b.map().height);
+  EXPECT_EQ(a.map().lake, b.map().lake);
+  EXPECT_EQ(a.map().river, b.map().river);
+  EXPECT_EQ(a.spawnX(), b.spawnX());
+  EXPECT_EQ(a.spawnY(), b.spawnY());
+  for (int i = 0; i < 200; ++i) {
+    int x = 1000 + i * 7, y = 1500 - i * 3;
+    EXPECT_EQ(a.sample(x, y).biome, b.sample(x, y).biome);
+  }
+
+  Island other(kSeed + 1);
+  EXPECT_NE(a.map().height, other.map().height);
+}
+
+TEST(IslandTest, SpawnIsInlandMidHeightAndDry) {
+  const Island &isl = sharedWorld().island();
+  TileSample s = isl.sample(isl.spawnX(), isl.spawnY());
+  EXPECT_EQ(s.biome, Biome::GRASSLAND);
+  EXPECT_GE(s.height, Island::kSpawnMinHeight);
+  EXPECT_LE(s.height, Island::kSpawnMaxHeight);
+  // No water within a few tiles of the first step.
+  for (int dy = -3; dy <= 3; ++dy)
+    for (int dx = -3; dx <= 3; ++dx)
+      EXPECT_FALSE(isWater(isl.sample(isl.spawnX() + dx, isl.spawnY() + dy).biome));
+}
+
+TEST(IslandTest, EveryRiverEndsInALakeOrTheOcean) {
+  const IslandMap &m = sharedWorld().island().map();
+  const int N = m.n * m.n;
+  int rivers = 0;
+  for (int c = 0; c < N; ++c) {
+    if (!m.river[c])
+      continue;
+    ++rivers;
+    // A river's next cell is more river, a lake or the sea - never dry land.
+    int r = m.receiver[c];
+    ASSERT_GE(r, 0);
+    EXPECT_TRUE(m.river[r] || m.lake[r] >= 0 || m.ocean[r]);
+    // And following it downstream always terminates in water.
+    int cur = c, steps = 0;
+    while (m.river[cur] && steps < N) {
+      cur = m.receiver[cur];
+      ++steps;
+    }
+    ASSERT_LT(steps, N) << "drainage has a cycle";
+    EXPECT_TRUE(m.lake[cur] >= 0 || m.ocean[cur]);
+  }
+  EXPECT_GT(rivers, 50) << "the island should have a river network";
+}
+
+TEST(IslandTest, LoneLakesAndFedLakesBothExist) {
+  const IslandMap &m = sharedWorld().island().map();
+  int lone = 0, fed = 0;
+  for (int inflow : m.lakeInflow)
+    (inflow == 0 ? lone : fed)++;
+  EXPECT_GT(lone, 0);
+  EXPECT_GT(fed, 0);
+}
+
+TEST(IslandTest, TheWrapSeamLiesInOpenOcean) {
+  const Island &isl = sharedWorld().island();
+  const int size = isl.config().size;
+  // Every tile within the open-sea margin is ocean - so the world can wrap
+  // there without any generator being seamless.
+  const int margin = (size - 2 * isl.config().radius()) / 2;
+  for (int i = 0; i < size; i += 5) {
+    for (int b = 0; b < margin; b += 37) {
+      EXPECT_EQ(isl.sample(b, i).biome, Biome::OCEAN);
+      EXPECT_EQ(isl.sample(size - 1 - b, i).biome, Biome::OCEAN);
+      EXPECT_EQ(isl.sample(i, b).biome, Biome::OCEAN);
+      EXPECT_EQ(isl.sample(i, size - 1 - b).biome, Biome::OCEAN);
+    }
+  }
+  EXPECT_GE(margin, 500);
+}
+
+// ---------------------------------------------------------------------------
+// Overworld: chunks, scatter, change record, wrap
+// ---------------------------------------------------------------------------
+TEST(OverworldTest, PropSpacingHoldsAcrossChunkBorders) {
+  const Overworld &w = sharedWorld();
+  const int cx = Overworld::chunkOf(w.spawnX()), cy = Overworld::chunkOf(w.spawnY());
+  std::vector<Prop> all;
+  for (int dy = -2; dy <= 2; ++dy)
+    for (int dx = -2; dx <= 2; ++dx)
+      for (const Prop &p : w.chunkProps(cx + dx, cy + dy))
+        all.push_back(p);
+  ASSERT_GT(all.size(), 30u);
+  const float r = Overworld::kPropSpacing;
+  for (size_t i = 0; i < all.size(); ++i) {
+    for (size_t j = i + 1; j < all.size(); ++j) {
+      float dx = all[i].px - all[j].px, dy = all[i].py - all[j].py;
+      ASSERT_GE(dx * dx + dy * dy, r * r - 1e-3f)
+          << propId(all[i].type) << " at (" << all[i].x << "," << all[i].y
+          << ") vs (" << all[j].x << "," << all[j].y << ")";
+    }
+  }
+}
+
+TEST(OverworldTest, ChunksDoNotDependOnBuildOrder) {
+  Overworld a(kSeed), b(kSeed);
+  const int cx = Overworld::chunkOf(a.spawnX()), cy = Overworld::chunkOf(a.spawnY());
+  // a builds the centre first, b builds it last.
+  auto sig = [](const std::vector<Prop> &ps) {
+    std::string s;
+    for (const Prop &p : ps)
+      s += std::to_string(p.x) + "," + std::to_string(p.y) + ":" +
+           propId(p.type) + ";";
+    return s;
+  };
+  std::string first = sig(a.chunkProps(cx, cy));
+  for (int dy = -1; dy <= 1; ++dy)
+    for (int dx = -1; dx <= 1; ++dx)
+      b.chunkProps(cx + dx, cy + dy);
+  EXPECT_EQ(first, sig(b.chunkProps(cx, cy)));
+  for (int dy = -1; dy <= 1; ++dy)
+    for (int dx = -1; dx <= 1; ++dx)
+      EXPECT_EQ(sig(a.chunkProps(cx + dx, cy + dy)),
+                sig(b.chunkProps(cx + dx, cy + dy)));
+}
+
+TEST(OverworldTest, SpawnIsClearOfProps) {
+  const Overworld &w = sharedWorld();
+  for (int dy = -Overworld::kSpawnClearance; dy <= Overworld::kSpawnClearance; ++dy)
+    for (int dx = -Overworld::kSpawnClearance; dx <= Overworld::kSpawnClearance; ++dx)
+      EXPECT_EQ(w.propAt(w.spawnX() + dx, w.spawnY() + dy), PropType::NONE);
+}
+
+TEST(OverworldTest, ARemovedPropStaysRemovedAfterItsChunkRegenerates) {
+  Overworld w(kSeed);
+  const int cx = Overworld::chunkOf(w.spawnX()), cy = Overworld::chunkOf(w.spawnY());
+  // Any prop near spawn.
+  const Prop *target = nullptr;
+  for (int dy = -1; dy <= 1 && !target; ++dy)
+    for (int dx = -1; dx <= 1 && !target; ++dx)
+      for (const Prop &p : w.chunkProps(cx + dx, cy + dy))
+        if (!target)
+          target = &p;
+  ASSERT_NE(target, nullptr);
+  const int px = target->x, py = target->y;
+  const PropType before = target->type;
+  const size_t propsBefore = w.chunkProps(Overworld::chunkOf(px), Overworld::chunkOf(py)).size();
+
+  ASSERT_TRUE(w.removeProp(px, py));
+  EXPECT_EQ(w.propAt(px, py), PropType::NONE);
+  EXPECT_FALSE(w.removeProp(px, py));
+
+  // Walk the camera across the world: everything near spawn is evicted.
+  w.retainAround(px + w.getWidth() / 2, py + w.getHeight() / 2, 1);
+  EXPECT_EQ(w.cachedChunkCount(), 0);
+
+  // Regenerated on demand - and the change is re-applied.
+  EXPECT_EQ(w.propAt(px, py), PropType::NONE);
+  EXPECT_EQ(w.chunkProps(Overworld::chunkOf(px), Overworld::chunkOf(py)).size(),
+            propsBefore - 1);
+  EXPECT_EQ(w.changeCount(), 1);
+
+  // A fresh world of the same seed still has it: the record is per world.
+  Overworld fresh(kSeed);
+  EXPECT_EQ(fresh.propAt(px, py), before);
+}
+
+TEST(OverworldTest, TilesAreContinuousAcrossTheWrapSeam) {
+  const Overworld &w = sharedWorld();
+  const int size = w.getWidth();
+  EXPECT_EQ(Overworld::chunkOf(-1), -1);
+  EXPECT_EQ(Overworld::chunkOf(0), 0);
+  EXPECT_EQ(Overworld::chunkOf(31), 0);
+  EXPECT_EQ(Overworld::chunkOf(-33), -2);
+  for (int i = 0; i < 50; ++i) {
+    int x = w.spawnX() + i * 13 - 300, y = w.spawnY() - i * 7 + 100;
+    EXPECT_EQ(w.biomeAt(x, y), w.biomeAt(x + size, y));
+    EXPECT_EQ(w.biomeAt(x, y), w.biomeAt(x - size, y - size));
+    EXPECT_EQ(w.propAt(x, y), w.propAt(x + size, y + size));
+  }
+  // Walking off the east edge lands on the west edge.
+  EXPECT_EQ(w.biomeAt(size, 10), w.biomeAt(0, 10));
+  EXPECT_EQ(w.biomeAt(-1, 10), w.biomeAt(size - 1, 10));
+}
+
+TEST(OverworldTest, CacheIsBoundedByTheViewNotTheWorld) {
+  Overworld w(kSeed);
+  for (int step = 0; step < 40; ++step) {
+    int x = w.spawnX() + step * 64;
+    w.biomeAt(x, w.spawnY());
+    w.retainAround(x, w.spawnY(), 2);
+    ASSERT_LE(w.cachedChunkCount(), 25);
+  }
+}
+
+TEST(OverworldTest, ItemLayerAndDrops) {
+  ItemDatabase::init();
+  Overworld w(kSeed);
+  const int sx = w.spawnX(), sy = w.spawnY();
+  EXPECT_FALSE(w.isSolid(sx, sy));
+  w.setItem(sx, sy, ItemType::MUSHROOM);
+  EXPECT_EQ(w.getItem(sx, sy), ItemType::MUSHROOM);
+  EXPECT_EQ(w.getItem(sx + w.getWidth(), sy), ItemType::MUSHROOM); // wraps
+  EXPECT_TRUE(w.isSolid(sx, sy));
+
+  int ox = 0, oy = 0;
+  ASSERT_TRUE(w.findNearestEmptyItemCell(sx, sy, 2, ox, oy));
+  EXPECT_FALSE(ox == sx && oy == sy);
+  EXPECT_FALSE(w.isSolid(ox, oy));
+  w.setItem(sx, sy, ItemType::NONE);
+  EXPECT_FALSE(w.isSolid(sx, sy));
+}
+
+// The seam: Player collides against the overworld through World alone.
+TEST(OverworldTest, PlayerIsStoppedByATree) {
+  Overworld w(kSeed);
+  const int cx = Overworld::chunkOf(w.spawnX()), cy = Overworld::chunkOf(w.spawnY());
+  const Prop *tree = nullptr;
+  for (int dy = -2; dy <= 2 && !tree; ++dy)
+    for (int dx = -2; dx <= 2 && !tree; ++dx)
+      for (const Prop &p : w.chunkProps(cx + dx, cy + dy))
+        if (!tree && propIsSolid(p.type) && !w.isSolid(p.x - 1, p.y) &&
+            !w.isSolid(p.x - 2, p.y))
+          tree = &p;
+  ASSERT_NE(tree, nullptr);
+  const int CELL = w.getCellSize();
+  const float treeLeft = (float)(tree->x * CELL);
+  Player player({(tree->x - 2) * CELL + CELL / 2.0f, tree->y * CELL + CELL / 2.0f},
+                AreaState::ROOM);
+  InputState right;
+  right.moveRight = true;
+  for (int i = 0; i < 120; ++i)
+    player.update(w, 1.0f / 60.0f, right);
+  EXPECT_LE(player.getPosition().x, treeLeft - 9.0f); // radius 10, minus rounding
+  EXPECT_GT(player.getPosition().x, treeLeft - 20.0f) << "it should have walked up to it";
+}

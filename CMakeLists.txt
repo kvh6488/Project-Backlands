@@ -64,6 +64,10 @@ set(BACKROOMS_GAME_SOURCES
     src/world/generators/prims_generator.cpp
     src/world/generators/tunnel_borer.cpp
     src/world/generators/generator_utils.cpp
+    src/world/generators/island_generator.cpp
+    src/world/generators/poisson.cpp
+    src/world/island.cpp
+    src/world/overworld.cpp
     src/entities/player.cpp
     src/items/item_database.cpp
     src/items/crafting_system.cpp
@@ -137,6 +141,7 @@ add_executable(BackroomsTests
     tests/test_magic_book.cpp
     tests/test_inventory.cpp
     tests/test_harness.cpp
+    tests/test_overworld.cpp
     ${BACKROOMS_GAME_SOURCES}
     ${BACKROOMS_DEV_SOURCES}
     ${BACKROOMS_VENDOR_SOURCES}
