@@ -11,7 +11,7 @@ class Application;
 // GameState — one screen's worth of game logic
 // ============================================================================
 // Application owns exactly one GameState at a time and drives it through
-// update/render. PlayingState is the only concrete state today; the main menu
+// update/render. MazeState is the only concrete state today; the main menu
 // and death screen are Phase 4.
 //
 // TRANSITIONS ARE A MAILBOX, NOT A CALL.

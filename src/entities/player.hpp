@@ -2,6 +2,7 @@
 
 #include "core/input_state.hpp"
 #include "world/maze.hpp"
+#include "world/world.hpp"
 #include "raylib.h"
 #include "items/crafting_system.hpp"
 #include <array>
@@ -25,7 +26,9 @@ enum class FacingDirection {
 // Player Class
 // ============================================================================
 // Handles the player's position, movement (kinematics), and collision detection
-// against the Maze's grid cells.
+// against whichever World it stands in. Maze-only rules (doors, the
+// room/corridor seal, cupboard hitboxes, the magic book) run only when
+// world.asMaze() is non-null; on the surface they do not exist.
 // ============================================================================
 
 
@@ -43,7 +46,7 @@ public:
   // Both dt and the input come from the caller rather than raylib, so there
   // is one authoritative clock and one input source per tick - which is what
   // lets a test drive this with a hand-built InputState.
-  void update(Maze &maze, float dt, const InputState &in, bool canMove = true);
+  void update(World &world, float dt, const InputState &in, bool canMove = true);
 
   // Getters
   Vector2 getPosition() const { return m_position; }
@@ -56,8 +59,8 @@ public:
   int getAvailableDoors(const Maze& maze) const;
 
   // --- Inventory System ---
-  void pickupItem(Maze &maze);
-  void dropItem(Maze &maze, int slotIndex);
+  void pickupItem(World &world);
+  void dropItem(World &world, int slotIndex);
   void consumeItem(int slotIndex);
   void destroyItem(int slotIndex);
   void swapSlots(int slotIndex1, int slotIndex2);
@@ -142,7 +145,7 @@ private:
 
   // --- Internal Collision Helpers ---
 
-  // Checks if the player's circle hitbox overlaps any solid wall in the maze.
+  // Checks if the player's circle hitbox overlaps any solid cell in the world.
   // We use the "Slide" method and radial push to keep the player out of walls.
-  void resolveCollision(const Maze &maze);
+  void resolveCollision(const World &world);
 };

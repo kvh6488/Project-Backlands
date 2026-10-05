@@ -13,7 +13,7 @@
 //   Telemetry    - a plain value a state fills in on request. InputState is a
 //                  value IN; this is the value OUT. No JSON, no file I/O in
 //                  states/ - the dev/ harness serialises it however it likes.
-//   CaptureSink  - the four hook points of one tick. PlayingState::render
+//   CaptureSink  - the four hook points of one tick. MazeState::render
 //                  calls the middle two at the only moments the canvas and
 //                  the back buffer are complete; Application brackets the
 //                  tick with the outer two. Null in the shipping game, so the

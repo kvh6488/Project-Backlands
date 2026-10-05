@@ -46,7 +46,7 @@ public:
   // tripOffset shifts the book in WORLD units to track the apparent motion
   // the trip shader gives the table underneath it. Without it the book is the
   // only stationary thing on a swimming screen, which reads as the book
-  // floating in circles above the table. PlayingState computes the value
+  // floating in circles above the table. MazeState computes the value
   // because it owns the shader; the renderer stays ignorant of it.
   //
   // glowScale multiplies the halo radius, for tuning by eye.

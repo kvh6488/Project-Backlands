@@ -14,7 +14,7 @@ Player::Player(Vector2 startPosition, AreaState startState)
 // ============================================================================
 // Update - Kinematics and Input
 // ============================================================================
-void Player::update(Maze &maze, float dt, const InputState &in,
+void Player::update(World &world, float dt, const InputState &in,
                     bool canMove) {
   // 1. FRAMERATE INDEPENDENCE (Delta Time)
   // dt is the seconds elapsed since the last frame (e.g. 0.016s at 60 FPS).
@@ -152,13 +152,15 @@ void Player::update(Maze &maze, float dt, const InputState &in,
 
     // INVENTORY PICKUP
     if (in.pickup) {
-      pickupItem(maze);
+      pickupItem(world);
     }
   }
 
-  if (doorIndexToEnter != -1) {
-    int gridX = maze.toGridX(m_position.x);
-    int gridY = maze.toGridY(m_position.y);
+  // Doors exist only in the maze.
+  Maze *maze = world.asMaze();
+  if (doorIndexToEnter != -1 && maze) {
+    int gridX = maze->toGridX(m_position.x);
+    int gridY = maze->toGridY(m_position.y);
 
     int dx[] = {0, 0, -1, 1};
     int dy[] = {-1, 1, 0, 0};
@@ -168,7 +170,7 @@ void Player::update(Maze &maze, float dt, const InputState &in,
     for (int i = 0; i < 4; ++i) {
       int nx = gridX + dx[i];
       int ny = gridY + dy[i];
-      int cell = maze.getCell(nx, ny);
+      int cell = maze->getCell(nx, ny);
 
       bool isDoor = false;
       if (m_areaState == AreaState::CORRIDOR && cell == Maze::CELL_ROOM) {
@@ -186,8 +188,8 @@ void Player::update(Maze &maze, float dt, const InputState &in,
             m_areaState = AreaState::CORRIDOR;
           }
           // Snap player over the threshold
-          m_position.x = nx * maze.getCellSize() + maze.getCellSize() / 2.0f;
-          m_position.y = ny * maze.getCellSize() + maze.getCellSize() / 2.0f;
+          m_position.x = nx * maze->getCellSize() + maze->getCellSize() / 2.0f;
+          m_position.y = ny * maze->getCellSize() + maze->getCellSize() / 2.0f;
           break; // Only enter one door per frame
         }
         validDoorCount++;
@@ -201,11 +203,11 @@ void Player::update(Maze &maze, float dt, const InputState &in,
 
   // Step 1: Move on the X axis, then check if we hit a wall and resolve it.
   m_position.x += velocity.x * dt;
-  resolveCollision(maze);
+  resolveCollision(world);
 
   // Step 2: Move on the Y axis, then check if we hit a wall and resolve it.
   m_position.y += velocity.y * dt;
-  resolveCollision(maze);
+  resolveCollision(world);
 
 
 }
@@ -213,11 +215,12 @@ void Player::update(Maze &maze, float dt, const InputState &in,
 // ============================================================================
 // Collision Resolution
 // ============================================================================
-void Player::resolveCollision(const Maze &maze) {
+void Player::resolveCollision(const World &world) {
   // To avoid checking every wall in the giant maze (O(V)), we only check the
   // grid cells immediately surrounding the player's current bounding box.
 
-  int cellSize = maze.getCellSize();
+  const Maze *maze = world.asMaze();
+  int cellSize = world.getCellSize();
 
   // Calculate the player's bounding box in pixel coordinates
   float minX = m_position.x - m_radius;
@@ -228,30 +231,19 @@ void Player::resolveCollision(const Maze &maze) {
   // Convert pixel coordinates to Maze Grid Coordinates
   // We use floor() to safely handle negative values if the player goes out of
   // bounds.
-  int startGridX = maze.toGridX(minX);
-  int endGridX = maze.toGridX(maxX);
-  int startGridY = maze.toGridY(minY);
-  int endGridY = maze.toGridY(maxY);
+  int startGridX = world.toGridX(minX);
+  int endGridX = world.toGridX(maxX);
+  int startGridY = world.toGridY(minY);
+  int endGridY = world.toGridY(maxY);
 
   // Loop through these nearby grid cells
   for (int y = startGridY; y <= endGridY; ++y) {
     for (int x = startGridX; x <= endGridX; ++x) {
 
-      // Check contextual solidity
-      int cell = maze.getCell(x, y);
-      bool isSolid = false;
-
-      if (cell == Maze::CELL_WALL) {
-        isSolid = true;
-      } else if (m_areaState == AreaState::CORRIDOR &&
-                 cell == Maze::CELL_ROOM) {
-        isSolid = true; // Rooms are solid walls from the outside
-      } else if (m_areaState == AreaState::ROOM &&
-                 cell == Maze::CELL_CORRIDOR) {
-        isSolid = true; // Corridors are solid walls from the inside
-      } else if (maze.getItem(x, y) != ItemType::NONE) {
-        isSolid = true; // Any placed item is a solid obstacle by default
-      }
+      // Walls, props and placed items, plus - in the maze - whichever side
+      // of the room/corridor seal the player is not on.
+      bool isSolid = world.isSolid(x, y) ||
+                     (maze && maze->isSealedFrom(x, y, m_areaState));
 
       if (isSolid) {
 
@@ -263,10 +255,10 @@ void Player::resolveCollision(const Maze &maze) {
 
         // Dynamically shrink the bounding box for cupboards so the player can
         // walk closer to the front
-        if (maze.getItem(x, y) == ItemType::CUPBOARD) {
-          bool wallAbove = maze.getCell(x, y - 1) == Maze::CELL_WALL;
-          bool wallRight = maze.getCell(x + 1, y) == Maze::CELL_WALL;
-          bool wallLeft = maze.getCell(x - 1, y) == Maze::CELL_WALL;
+        if (maze && maze->getItem(x, y) == ItemType::CUPBOARD) {
+          bool wallAbove = maze->getCell(x, y - 1) == Maze::CELL_WALL;
+          bool wallRight = maze->getCell(x + 1, y) == Maze::CELL_WALL;
+          bool wallLeft = maze->getCell(x - 1, y) == Maze::CELL_WALL;
 
           float shrinkAmount = 14.0f;
           if (wallAbove) {
@@ -344,9 +336,10 @@ int Player::getAvailableDoors(const Maze &maze) const {
 // INVENTORY SYSTEM
 // ============================================================================
 
-void Player::pickupItem(Maze &maze) {
-  int px = maze.toGridX(m_position.x);
-  int py = maze.toGridY(m_position.y);
+void Player::pickupItem(World &world) {
+  int px = world.toGridX(m_position.x);
+  int py = world.toGridY(m_position.y);
+  Maze *maze = world.asMaze();
 
   ItemType typeToPickup = ItemType::NONE;
   int targetX = px;
@@ -355,7 +348,7 @@ void Player::pickupItem(Maze &maze) {
   // Search a 3x3 area around the player for a pickupable item
   for (int y = py - 1; y <= py + 1 && typeToPickup == ItemType::NONE; ++y) {
     for (int x = px - 1; x <= px + 1 && typeToPickup == ItemType::NONE; ++x) {
-      ItemType type = maze.getItem(x, y);
+      ItemType type = world.getItem(x, y);
       if (type != ItemType::NONE && ItemDatabase::getDef(type).isPickable) {
         typeToPickup = type;
         targetX = x;
@@ -370,20 +363,20 @@ void Player::pickupItem(Maze &maze) {
   }
 
   // Check for Magic Book of Maps in front of player
-  if (typeToPickup == ItemType::NONE && maze.isMagicBookSpawned()) {
+  if (typeToPickup == ItemType::NONE && maze && maze->isMagicBookSpawned()) {
     int faceX = px, faceY = py;
     if (m_facingDirection == FacingDirection::UP) faceY--;
     else if (m_facingDirection == FacingDirection::DOWN) faceY++;
     else if (m_facingDirection == FacingDirection::LEFT) faceX--;
     else if (m_facingDirection == FacingDirection::RIGHT) faceX++;
     
-    int bookX = maze.getMagicBookX();
-    int bookY = maze.getMagicBookY();
+    int bookX = maze->getMagicBookX();
+    int bookY = maze->getMagicBookY();
     
     // The table occupies (bookX, bookY) and another adjacent tile.
     // If state == 1 (Horizontal Right), the table is at (bookX-1, bookY) and (bookX, bookY)
     // If state == 3 (Vertical Bottom), the table is at (bookX, bookY-1) and (bookX, bookY)
-    int state = maze.getItemState(bookX, bookY);
+    int state = maze->getItemState(bookX, bookY);
     bool facingBook = false;
     
     if (faceX == bookX && faceY == bookY) {
@@ -408,9 +401,9 @@ void Player::pickupItem(Maze &maze) {
   for (int i = 0; i < INVENTORY_SLOTS; ++i) {
     if (m_inventory[i].type == typeToPickup && m_inventory[i].count < maxStack) {
       m_inventory[i].count++;
-      if (targetX != -1) maze.setItem(targetX, targetY, ItemType::NONE);
+      if (targetX != -1) world.setItem(targetX, targetY, ItemType::NONE);
       if (typeToPickup == ItemType::MAGIC_BOOK_OF_MAPS) {
-        maze.despawnMagicBook();
+        maze->despawnMagicBook();
         m_hasPickedUpMagicBook = true;
       }
       return;
@@ -422,9 +415,9 @@ void Player::pickupItem(Maze &maze) {
     if (m_inventory[i].type == ItemType::NONE) {
       m_inventory[i].type = typeToPickup;
       m_inventory[i].count = 1;
-      if (targetX != -1) maze.setItem(targetX, targetY, ItemType::NONE);
+      if (targetX != -1) world.setItem(targetX, targetY, ItemType::NONE);
       if (typeToPickup == ItemType::MAGIC_BOOK_OF_MAPS) {
-        maze.despawnMagicBook();
+        maze->despawnMagicBook();
         m_hasPickedUpMagicBook = true;
       }
       return;
@@ -432,19 +425,19 @@ void Player::pickupItem(Maze &maze) {
   }
 }
 
-void Player::dropItem(Maze &maze, int slotIndex) {
+void Player::dropItem(World &world, int slotIndex) {
   if (slotIndex < 0 || slotIndex >= INVENTORY_SLOTS)
     return;
   if (m_inventory[slotIndex].type == ItemType::NONE)
     return;
 
-  int gridX = maze.toGridX(m_position.x);
-  int gridY = maze.toGridY(m_position.y);
+  int gridX = world.toGridX(m_position.x);
+  int gridY = world.toGridY(m_position.y);
 
   int outX, outY;
   // Try to find nearest empty cell up to radius 2
-  if (maze.findNearestEmptyItemCell(gridX, gridY, 2, outX, outY)) {
-    maze.setItem(outX, outY, m_inventory[slotIndex].type);
+  if (world.findNearestEmptyItemCell(gridX, gridY, 2, outX, outY)) {
+    world.setItem(outX, outY, m_inventory[slotIndex].type);
 
     m_inventory[slotIndex].count--;
     if (m_inventory[slotIndex].count <= 0) {

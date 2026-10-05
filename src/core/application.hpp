@@ -6,6 +6,7 @@
 #include "dev/debug_overlay.hpp"
 #include "ui/ui_manager.hpp"
 #include "states/game_state.hpp"
+#include "states/run.hpp"
 #include <memory>
 
 // Everything main() decides before the window exists. Defaults are the
@@ -52,13 +53,14 @@ public:
 
 private:
   const bool m_headless;
-  unsigned int m_seed;
 
   // Where each tick's InputState comes from. Hardware in the shipping game;
   // m_input points at m_hardwareInput unless the config supplied a source.
   HardwareInput m_hardwareInput;
   InputSource *m_input;
   CaptureSink *m_capture;
+  // Declared before every state so it outlives them: states borrow it.
+  Run m_run;
   UIManager m_uiManager;
   // Owned here rather than by a state so the panel survives future state
   // switches (menu, death screen) and F1 keeps working across them.

@@ -8,7 +8,7 @@
 #include "items/crafting_system.hpp"
 #include "items/item_database.hpp"
 #include "render/view_bounds.hpp"
-#include "states/playing_state.hpp"
+#include "states/maze_state.hpp"
 #include "ui/ui_manager.hpp"
 #include <gtest/gtest.h>
 
@@ -232,7 +232,8 @@ TEST(TelemetryTest, SnapshotAgreesWithTheWorld) {
   CraftingSystem::init();
   UIManager ui(1280, 720);
   DebugOverlay overlay(false);
-  PlayingState state(ui, overlay, 1788480606u);
+  ::Run run(1788480606u); // qualified: gtest's Test::Run() shadows it
+  MazeState state(run, ui, overlay);
   state.generateWorld();
 
   Telemetry t;

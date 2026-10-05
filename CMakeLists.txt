@@ -70,7 +70,7 @@ set(BACKROOMS_GAME_SOURCES
     src/render/maze_renderer.cpp
     src/render/player_renderer.cpp
     src/render/item_renderer.cpp
-    src/states/playing_state.cpp
+    src/states/maze_state.cpp
     src/ui/ui_manager.cpp
 )
 

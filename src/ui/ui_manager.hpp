@@ -5,6 +5,7 @@
 #include "render/item_renderer.hpp"
 #include "raylib.h"
 #include "world/maze.hpp"
+#include "world/world.hpp"
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -80,15 +81,16 @@ public:
 
   // Applies this frame's mouse input to the inventory, cupboard and crafting
   // menu. MUST be called from the state's input phase, before render(), and is
-  // the ONLY place UIManager mutates a Player or a Maze - render() is now
-  // read-only with respect to game state.
-  void handleInventoryInput(Player &player, Maze &maze, const InputState &in);
+  // the ONLY place UIManager mutates a Player or a World - render() is now
+  // read-only with respect to game state. Cupboards, doors and the magic
+  // book's map are maze furniture: they only appear when world.asMaze().
+  void handleInventoryInput(Player &player, World &world, const InputState &in);
 
   // Renders the shipping UI: popups, inventory, cupboards and map overlays.
   // The debug panel is DebugOverlay's job and draws after this.
   // `in` is read only for the mouse position (hover highlights, tooltips);
   // the read-only-with-respect-to-game-state rule above still holds.
-  void render(Player &player, Maze &maze, ItemRenderer &itemRenderer,
+  void render(Player &player, World &world, ItemRenderer &itemRenderer,
               bool isDroppingItem, float totalTime, const InputState &in);
 
   // The scale UIManager lays its own widgets out with. DebugOverlay reuses it
@@ -148,7 +150,7 @@ public:
   void markMagicBookMapDirty() { m_magicBookMapDirty = true; }
 
 private:
-  void renderInventory(Player &player, Maze &maze, ItemRenderer &itemRenderer,
+  void renderInventory(Player &player, Maze *maze, ItemRenderer &itemRenderer,
                        const InventoryLayout &layout, int screenW,
                        int screenH, const InputState &in);
 
@@ -156,7 +158,7 @@ private:
   // isCupboardSlot selects which of the two open containers `index` addresses,
   // which is also how a stack crosses between them.
   void applySlotClick(int index, bool isCupboardSlot, Player &player,
-                      Maze &maze);
+                      Maze *maze);
   void renderPopups(float scale, int screenW, int screenH, float totalTime);
   void generateMagicBookMap(Maze &maze);
 

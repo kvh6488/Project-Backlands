@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
 
   AppConfig cfg;
   // A seed fully determines the world, so resolving it here (rather than
-  // hardcoding one in PlayingState) turns "reproduce that bug" into a command
+  // hardcoding one in MazeState) turns "reproduce that bug" into a command
   // line flag instead of a recompile. See dev/debug_seeds.hpp.
   cfg.seed = debugseeds::resolveFromArgs(argc, argv, &cfg.seedNote);
   // Without --dev the debug overlay is unreachable, so the game plays exactly

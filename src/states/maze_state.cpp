@@ -1,4 +1,4 @@
-#include "states/playing_state.hpp"
+#include "states/maze_state.hpp"
 #include "render/theme.hpp"
 #include "items/item_database.hpp"
 #include "world/generators/bsp_generator.hpp"
@@ -10,22 +10,21 @@
 #include "core/asset_load.hpp"
 #include "render/view_bounds.hpp"
 #include "dev/debug_log.hpp"
-#include <ctime>
 #include <iostream>
 
-PlayingState::PlayingState(UIManager &uiManager, DebugOverlay &debugOverlay,
-                           unsigned int seed, CaptureSink *capture,
-                           float blitScale)
+MazeState::MazeState(Run &run, UIManager &uiManager,
+                     DebugOverlay &debugOverlay, CaptureSink *capture,
+                     float blitScale)
     : m_uiManager(uiManager), m_debugOverlay(debugOverlay), m_capture(capture),
-      m_seed(seed != 0 ? seed : (unsigned int)std::time(nullptr)), m_rng(m_seed),
-      m_maze(250, 150, grid::CELL, m_seed), m_player(Vector2{0, 0}, AreaState::ROOM),
+      m_run(run), m_seed(run.seed), m_rng(m_seed),
+      m_maze(250, 150, grid::CELL, m_seed), m_player(run.player),
       m_itemSpawner(m_rng), m_totalTime(0.0f) {
   m_renderSettings.blitScale = blitScale;
 }
 
-PlayingState::~PlayingState() {}
+MazeState::~MazeState() {}
 
-void PlayingState::generateWorld() {
+void MazeState::generateWorld() {
   debuglog::log("MAZE", "generating %dx%d world from seed %u",
                 m_maze.getWidth(), m_maze.getHeight(), m_seed);
   m_debugOverlay.setSeed(m_seed);
@@ -57,10 +56,11 @@ void PlayingState::generateWorld() {
     playerStartPos.y =
         (closestRoom.y + closestRoom.height / 2.0f) * m_maze.getCellSize();
   }
-  m_player = Player(playerStartPos, AreaState::ROOM);
+  // Place, never rebuild: the player belongs to the Run, bag and all.
+  m_player.teleport(playerStartPos, AreaState::ROOM);
 }
 
-void PlayingState::onEnter() {
+void MazeState::onEnter() {
   // 1. Load Textures
   m_renderer.loadTextures();
   m_itemRenderer.loadTextures();
@@ -79,18 +79,18 @@ void PlayingState::onEnter() {
   m_camera.zoom = 1.0f;
 
   // 5. Load Shaders
-  m_tripShader = assets::loadShader(0, "assets/magic_trip.fs", "PlayingState");
+  m_tripShader = assets::loadShader(0, "assets/magic_trip.fs", "MazeState");
   m_tripTimeLoc = GetShaderLocation(m_tripShader, "time");
   m_tripStrengthLoc = GetShaderLocation(m_tripShader, "strength");
   m_screenTarget = LoadRenderTexture(m_canvas.width, m_canvas.height);
 }
 
-void PlayingState::onExit() {
+void MazeState::onExit() {
   UnloadRenderTexture(m_screenTarget);
   UnloadShader(m_tripShader);
 }
 
-void PlayingState::update(float dt, const InputState &in) {
+void MazeState::update(float dt, const InputState &in) {
   if (in.toggleFullscreen) {
     ToggleFullscreen();
   }
@@ -331,7 +331,7 @@ void PlayingState::update(float dt, const InputState &in) {
   m_uiManager.update(dt);
 }
 
-void PlayingState::handleInput(const InputState &in) {
+void MazeState::handleInput(const InputState &in) {
   if (in.toggleInventory) {
     m_uiManager.toggleInventory();
     if (!m_uiManager.isInventoryOpen()) {
@@ -469,7 +469,7 @@ void PlayingState::handleInput(const InputState &in) {
 // first-order approximation, exact enough here: peak displacement is ~3% of
 // the screen, well inside the range where the two agree.
 // ============================================================================
-Vector2 PlayingState::computeTripFollowOffset() const {
+Vector2 MazeState::computeTripFollowOffset() const {
   float strength = m_player.getMushroomEffectStrength();
   if (strength <= 0.0f || !m_maze.isMagicBookSpawned()) {
     return {0.0f, 0.0f};
@@ -510,7 +510,7 @@ Vector2 PlayingState::computeTripFollowOffset() const {
 // Both the mushroom-trip path and the debug button funnel through here so the
 // outcome is reported identically. The status string is the diagnostic that
 // tells a blank screen apart from a failed placement.
-void PlayingState::attemptMagicBookSpawn() {
+void MazeState::attemptMagicBookSpawn() {
   int gridX = m_maze.toGridX(m_player.getPosition().x);
   int gridY = m_maze.toGridY(m_player.getPosition().y);
 
@@ -537,7 +537,7 @@ void PlayingState::attemptMagicBookSpawn() {
   }
 }
 
-void PlayingState::render(const InputState &in) {
+void MazeState::render(const InputState &in) {
   if (m_screenTarget.texture.width != m_canvas.width ||
       m_screenTarget.texture.height != m_canvas.height) {
     UnloadRenderTexture(m_screenTarget);
@@ -648,7 +648,7 @@ void PlayingState::render(const InputState &in) {
   EndDrawing();
 }
 
-void PlayingState::snapshot(Telemetry &out) const {
+void MazeState::snapshot(Telemetry &out) const {
   const Vector2 pos = m_player.getPosition();
   out.playerWorldPos = pos;
   out.playerCellX = m_maze.toGridX(pos.x);
@@ -724,7 +724,7 @@ void PlayingState::snapshot(Telemetry &out) const {
 // error. The asymmetry is deliberate: it makes the centre band the largest, so
 // the middle of the world shifts least.
 // ============================================================================
-std::vector<Maze::Room> PlayingState::buildTicTacToeZones(int width, int height,
+std::vector<Maze::Room> MazeState::buildTicTacToeZones(int width, int height,
                                                           int thickness) {
   const int w = width;
   const int h = height;
@@ -752,7 +752,7 @@ std::vector<Maze::Room> PlayingState::buildTicTacToeZones(int width, int height,
   return zones;
 }
 
-void PlayingState::regenerateTicTacToeZones() {
+void MazeState::regenerateTicTacToeZones() {
   std::vector<Maze::Room> zones =
       buildTicTacToeZones(m_maze.getWidth(), m_maze.getHeight(), m_zoneThickness);
 

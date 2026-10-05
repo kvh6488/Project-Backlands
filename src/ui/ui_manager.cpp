@@ -52,25 +52,26 @@ void UIManager::showPopup(const std::string &text, PopupType type,
   m_activePopups.push_back({text, type, duration, duration});
 }
 
-void UIManager::render(Player &player, Maze &maze, ItemRenderer &itemRenderer,
-                       bool isDroppingItem, float totalTime,
-                       const InputState &in) {
+void UIManager::render(Player &player, World &world,
+                       ItemRenderer &itemRenderer, bool isDroppingItem,
+                       float totalTime, const InputState &in) {
+  Maze *maze = world.asMaze();
   float scale = std::min((float)GetScreenWidth() / m_screenWidth,
                          (float)GetScreenHeight() / m_screenHeight);
   int screenW = GetScreenWidth();
   int screenH = GetScreenHeight();
 
   // 1. Check if we need to regenerate the magic book's map
-  if (m_magicBookMapTexture.id == 0 || m_magicBookMapDirty) {
+  if (maze && (m_magicBookMapTexture.id == 0 || m_magicBookMapDirty)) {
     if (m_magicBookMapTexture.id == 0) {
       m_magicBookMapTexture = LoadRenderTexture(kBookMapW, kBookMapH);
     }
-    generateMagicBookMap(maze);
+    generateMagicBookMap(*maze);
     m_magicBookMapDirty = false;
   }
 
   // 2. Door prompt (special hardcoded logic for now)
-  int doorCount = player.getAvailableDoors(maze);
+  int doorCount = maze ? player.getAvailableDoors(*maze) : 0;
   if (doorCount == 1) {
     const char *msg = "Press 'K' to use door";
     int textWidth = MeasureText(msg, 30 * scale);
@@ -131,21 +132,21 @@ void UIManager::render(Player &player, Maze &maze, ItemRenderer &itemRenderer,
 
     // Calculate relative position for player dot
     Vector2 pPos = player.getPosition();
-    int gridX = maze.toGridX(pPos.x);
-    int gridY = maze.toGridY(pPos.y);
+    int gridX = world.toGridX(pPos.x);
+    int gridY = world.toGridY(pPos.y);
 
     int relX = gridX - startX;
     int relY = gridY - startY;
 
     // Handle wrapping (toroidal)
-    if (relX < -maze.getWidth() / 2)
-      relX += maze.getWidth();
-    else if (relX > maze.getWidth() / 2)
-      relX -= maze.getWidth();
-    if (relY < -maze.getHeight() / 2)
-      relY += maze.getHeight();
-    else if (relY > maze.getHeight() / 2)
-      relY -= maze.getHeight();
+    if (relX < -world.getWidth() / 2)
+      relX += world.getWidth();
+    else if (relX > world.getWidth() / 2)
+      relX -= world.getWidth();
+    if (relY < -world.getHeight() / 2)
+      relY += world.getHeight();
+    else if (relY > world.getHeight() / 2)
+      relY -= world.getHeight();
 
     bool inBounds = (relX >= 0 && relX < texWidth && relY >= 0 && relY < texHeight);
 
@@ -304,8 +305,9 @@ Rectangle InventoryLayout::craftButton() const {
 // first hit consumes the click, so a stack picked up here cannot be put back
 // down by a later slot in the same frame.
 // ============================================================================
-void UIManager::handleInventoryInput(Player &player, Maze &maze,
+void UIManager::handleInventoryInput(Player &player, World &world,
                                      const InputState &in) {
+  Maze *maze = world.asMaze();
   // Closed panels swallow no clicks: the hotbar is on screen permanently, but
   // has never been clickable while the bag is shut.
   if (!m_inventoryOpen && !m_cupboardInventoryOpen) {
@@ -389,11 +391,11 @@ void UIManager::handleInventoryInput(Player &player, Maze &maze,
 // applySlotClick - pick up, put down, merge or swap
 // ============================================================================
 void UIManager::applySlotClick(int index, bool isCupboardSlot, Player &player,
-                               Maze &maze) {
+                               Maze *maze) {
   auto &playerInv = player.getInventoryRef();
   auto *cupboardInv =
-      m_cupboardInventoryOpen
-          ? &maze.getCupboardInventory(m_openedCupboardX, m_openedCupboardY)
+      m_cupboardInventoryOpen && maze
+          ? &maze->getCupboardInventory(m_openedCupboardX, m_openedCupboardY)
           : nullptr;
   if (isCupboardSlot && cupboardInv == nullptr) {
     return;
@@ -442,7 +444,7 @@ void UIManager::applySlotClick(int index, bool isCupboardSlot, Player &player,
 // is its own hover bookkeeping, which exists purely to place the tooltip.
 // Every click was already resolved by handleInventoryInput earlier this frame.
 // ============================================================================
-void UIManager::renderInventory(Player &player, Maze &maze,
+void UIManager::renderInventory(Player &player, Maze *maze,
                                 ItemRenderer &itemRenderer,
                                 const InventoryLayout &layout, int screenW,
                                 int screenH, const InputState &in) {
@@ -456,8 +458,8 @@ void UIManager::renderInventory(Player &player, Maze &maze,
 
   const auto &playerInv = player.getInventory();
   const std::array<InventorySlot, INVENTORY_SLOTS> *cupboardInv =
-      m_cupboardInventoryOpen
-          ? &maze.getCupboardInventory(m_openedCupboardX, m_openedCupboardY)
+      m_cupboardInventoryOpen && maze
+          ? &maze->getCupboardInventory(m_openedCupboardX, m_openedCupboardY)
           : nullptr;
 
   auto drawSlot = [&](int index, Rectangle slotRect, bool isHotbar,

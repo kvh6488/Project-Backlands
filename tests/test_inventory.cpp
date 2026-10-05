@@ -145,7 +145,7 @@ TEST_F(InventoryTest, PickupLeavesTheItemOnTheGroundWhenTheBagIsFull) {
   EXPECT_EQ(totalOf(player, ItemType::MUSHROOM), 0);
 }
 
-// The one-shot flag convention: PlayingState drains each event exactly once
+// The one-shot flag convention: MazeState drains each event exactly once
 // per occurrence. A poll that stayed true would replay the popup every frame.
 TEST_F(InventoryTest, FirstMagicMushroomPickupRaisesItsEventExactlyOnce) {
   Maze maze = makeRoomMaze();

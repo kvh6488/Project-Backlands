@@ -16,7 +16,7 @@
 // Two rules keep it from leaking into the game:
 //
 //   1. It is a *view*. Settings the game needs regardless live in
-//      RenderSettings, which PlayingState owns; the overlay edits them by
+//      RenderSettings, which MazeState owns; the overlay edits them by
 //      reference. Only debug-only state (the minimap texture, the forcing
 //      flags, the status strings) is owned here.
 //   2. Its buttons call the same public entry points the real systems will use.
@@ -52,7 +52,7 @@ public:
   // layout must mark it dirty.
   void markMapDirty() { m_mapDirty = true; }
 
-  // --- Request flags (polled and cleared by PlayingState) ---
+  // --- Request flags (polled and cleared by MazeState) ---
   // The overlay never touches the world; it only raises requests, matching the
   // mailbox convention UIManager uses.
   bool triggerTicTacToeRegen() const { return m_triggerTicTacToeRegen; }

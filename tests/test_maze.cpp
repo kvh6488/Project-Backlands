@@ -3,7 +3,7 @@
 #include "world/generators/prims_generator.hpp"
 #include "world/generators/tunnel_borer.hpp"
 #include "world/item_spawner.hpp"
-#include "states/playing_state.hpp"
+#include "states/maze_state.hpp"
 #include "world/maze.hpp"
 #include "render/view_bounds.hpp"
 #include "dev/debug_overlay.hpp"
@@ -495,7 +495,7 @@ TEST(MazeTest, UniformRoomRadiation) {
 // ============================================================================
 // Zone-regeneration item bookkeeping
 // ============================================================================
-// PlayingState::regenerateTicTacToeZones erases eight strips of the world and
+// MazeState::regenerateTicTacToeZones erases eight strips of the world and
 // asks the ItemSpawner to replenish exactly what was destroyed. That contract
 // is only as good as clearItemsInZone's report — an undercount silently thins
 // the world out a little more on every regeneration.
@@ -582,7 +582,7 @@ TEST(MazeItemLayerTest, ClearItemsInZoneAlsoDropsTheCupboardInventory) {
 // hardcoded list held, so the refactor cannot have moved the world.
 // ============================================================================
 TEST(TicTacToeZoneTest, DerivedLayoutMatchesTheOriginalHardcodedRectangles) {
-  auto zones = PlayingState::buildTicTacToeZones(250, 150, 14);
+  auto zones = MazeState::buildTicTacToeZones(250, 150, 14);
 
   const int expected[8][4] = {
       {55, 0, 14, 150},   {180, 0, 14, 150}, {0, 30, 55, 14},
@@ -602,7 +602,7 @@ TEST(TicTacToeZoneTest, DerivedLayoutMatchesTheOriginalHardcodedRectangles) {
 // count the items it reports and the spawner would over-replenish.
 TEST(TicTacToeZoneTest, StripsCoverDistinctCells) {
   const int w = 250, h = 150;
-  auto zones = PlayingState::buildTicTacToeZones(w, h, 14);
+  auto zones = MazeState::buildTicTacToeZones(w, h, 14);
 
   std::vector<int> hits(w * h, 0);
   for (const auto &z : zones) {
@@ -626,7 +626,7 @@ TEST(TicTacToeZoneTest, StripsCoverDistinctCells) {
 // strips that run off the edge or invert.
 TEST(TicTacToeZoneTest, StaysInBoundsAtOtherWorldSizes) {
   const int w = 120, h = 80, t = 8;
-  auto zones = PlayingState::buildTicTacToeZones(w, h, t);
+  auto zones = MazeState::buildTicTacToeZones(w, h, t);
 
   ASSERT_FALSE(zones.empty());
   for (const auto &z : zones) {
@@ -702,7 +702,8 @@ TEST(DeterminismTest, SameSeedSurvivesZoneRegeneration) {
   auto run = [&]() {
     UIManager ui(1280, 720);
     DebugOverlay overlay(false);
-    PlayingState state(ui, overlay, seed);
+    ::Run r(seed); // qualified: gtest's Test::Run() shadows it here
+    MazeState state(r, ui, overlay);
     state.generateWorld();
     std::string initial = worldFingerprint(state.getMaze());
     state.regenerateTicTacToeZones();

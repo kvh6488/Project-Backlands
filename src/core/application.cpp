@@ -6,13 +6,13 @@
 #include "items/crafting_system.hpp"
 #include "imgui.h"
 #include "rlImGui.h"
-#include "states/playing_state.hpp"
+#include "states/maze_state.hpp"
 
 
 Application::Application(const AppConfig &config)
-    : m_headless(config.headless), m_seed(config.seed),
+    : m_headless(config.headless),
       m_input(config.input ? config.input : &m_hardwareInput),
-      m_capture(config.capture),
+      m_capture(config.capture), m_run(config.seed),
       m_uiManager(config.windowW, config.windowH),
       // The panel needs ImGui, which a headless run never sets up.
       m_debugOverlay(config.devMode && !config.headless) {
@@ -21,9 +21,9 @@ Application::Application(const AppConfig &config)
   // Warnings and errors still come through, so real failures (a texture that
   // did not load) remain visible.
   SetTraceLogLevel(LOG_WARNING);
-  debuglog::log("SEED", "%u  (%s)", m_seed,
+  debuglog::log("SEED", "%u  (%s)", m_run.seed,
                 config.seedNote ? config.seedNote : "unspecified");
-  debuglog::log("SEED", "reproduce with:  Backrooms.exe --seed %u", m_seed);
+  debuglog::log("SEED", "reproduce with:  Backrooms.exe --seed %u", m_run.seed);
   if (m_debugOverlay.isVisible()) {
     debuglog::log("DEV", "debug tools armed  (F1 toggles the panel)");
   }
@@ -45,7 +45,7 @@ Application::Application(const AppConfig &config)
   // Raylib seeds GetRandomValue from the clock at InitWindow. The radiation
   // flicker and the magic-book roll use it, so pin it to the world seed or
   // two runs of one seed diverge the first time the lights flicker.
-  SetRandomSeed(m_seed);
+  SetRandomSeed(m_run.seed);
 
   // 1.5 Set Window Icon
   Image iconImage =
@@ -66,8 +66,8 @@ Application::Application(const AppConfig &config)
   CraftingSystem::init();
 
   // 3. Set Initial State
-  m_currentState = std::make_unique<PlayingState>(
-      m_uiManager, m_debugOverlay, m_seed, m_capture, config.blitScale);
+  m_currentState = std::make_unique<MazeState>(
+      m_run, m_uiManager, m_debugOverlay, m_capture, config.blitScale);
   m_currentState->onEnter();
 }
 

@@ -8,6 +8,7 @@ enum class AreaState { CORRIDOR, ROOM };
 
 #include "core/grid.hpp"
 #include "items/item.hpp"
+#include "world/world.hpp"
 
 
 // Forward declarations
@@ -27,7 +28,7 @@ enum class FacingDirection;
 // the grid geometry. This is much faster and uses far less memory.
 // ============================================================================
 
-class Maze {
+class Maze final : public World {
 public:
   // --- Cell Type Constants ---
   // These are the integer values stored in our 1D grid array.
@@ -51,19 +52,7 @@ public:
   // This is the heart of our 1D-to-2D mapping.
   int getIndex(int x, int y) const;
 
-  // Wrap a single coordinate onto the torus. getIndex does this internally;
-  // these exist for code that needs the wrapped coordinate itself rather than
-  // an index. Always use them instead of hand-rolling the modulo.
-  int wrapX(int x) const;
-  int wrapY(int y) const;
-
-  // Convert a world-space pixel coordinate to a grid coordinate.
-  // Deliberately does NOT wrap: getIndex wraps at the point of access, so
-  // callers that compare raw coordinates (camera bounds, click targets, the
-  // player's own tile) keep seeing monotonic values across the seam.
-  // floor(), not a cast, so negative world positions round the right way.
-  int toGridX(float worldX) const;
-  int toGridY(float worldY) const;
+  // wrapX/wrapY and toGridX/toGridY come from World.
 
   // Get the cell type at grid position (x, y).
   // Returns CELL_WALL, CELL_CORRIDOR, or CELL_ROOM.
@@ -71,6 +60,18 @@ public:
 
   // Set the cell type at grid position (x, y).
   void setCell(int x, int y, int cellType);
+
+  // --- World contract ---
+  // Walls and placed items. The room/corridor rule is isSealedFrom, below.
+  bool isSolid(int x, int y) const override;
+
+  // The door rule: from inside a room every corridor cell is a wall, and from
+  // a corridor every room cell is. Doors are crossed by an explicit K/L
+  // transition, never by walking.
+  bool isSealedFrom(int x, int y, AreaState side) const;
+
+  Maze *asMaze() override { return this; }
+  const Maze *asMaze() const override { return this; }
 
   // ============================================================================
   // updateVisibility - the room field of view
@@ -106,11 +107,6 @@ public:
   void addShiftingZone(int x, int y, int w, int h);
   void eraseZone(int startX, int startY, int width, int height);
 
-  // --- Public Dimension Getters ---
-  int getWidth() const { return m_width; }
-  int getHeight() const { return m_height; }
-  int getCellSize() const { return m_cellSize; }
-
   // --- Real-time Statistics ---
   // Returns the total number of cells that are NOT walls (O(1) time).
   int getNonWallCount() const { return m_nonWallCount; }
@@ -133,8 +129,8 @@ public:
   // --- Item Layer (Grid-Parallel) ---
   // Each cell can hold one item. O(1) read/write via the same index math
   // as m_grid. This replaces per-item-type lists (m_barrels, etc.).
-  ItemType getItem(int x, int y) const;
-  void setItem(int x, int y, ItemType type);
+  ItemType getItem(int x, int y) const override;
+  void setItem(int x, int y, ItemType type) override;
 
   // Wipe all items in a rectangular zone and return a count of each type
   // that was removed. Used during Tic-Tac-Toe zone regeneration so the
@@ -149,11 +145,12 @@ public:
   bool isBarrelNear(int x, int y, int radius = 1) const;
 
   // --- Phase 5: Inventory System ---
-  bool findNearestEmptyItemCell(int startX, int startY, int maxRadius, int& outX, int& outY) const;
+  bool findNearestEmptyItemCell(int startX, int startY, int maxRadius,
+                                int &outX, int &outY) const override;
   
   // --- Generic Item States ---
   // 0 = default, 1 = open, 2 = broken, etc.
-  int getItemState(int x, int y) const;
+  int getItemState(int x, int y) const override;
   void setItemState(int x, int y, int state);
 
   // --- Cupboard Inventories ---
@@ -169,10 +166,6 @@ public:
   int getMagicBookY() const { return m_magicBookTableY; }
 
 private:
-  int m_width;    // Number of cells horizontally
-  int m_height;   // Number of cells vertically
-  int m_cellSize; // World px per cell; grid::CELL in the shipping game
-
   // Real-time stat tracking
   int m_nonWallCount;
   int m_corridorCount;

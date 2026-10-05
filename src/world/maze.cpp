@@ -8,7 +8,7 @@
 // Constructor
 // ============================================================================
 Maze::Maze(int width, int height, int cellSize, unsigned int seed)
-    : m_width(width), m_height(height), m_cellSize(cellSize), m_nonWallCount(0),
+    : World(width, height, cellSize), m_nonWallCount(0),
       m_corridorCount(0), m_grid(width * height, CELL_WALL),
       m_visible(width * height, false), m_radiationMap(width * height, 0),
       m_items(width * height, ItemType::NONE) {}
@@ -22,29 +22,23 @@ int Maze::getIndex(int x, int y) const {
   return wrapY(y) * m_width + wrapX(x);
 }
 
-// --- TOROIDAL MATH (MODULO WRAPPING) ---
-// In C++, the '%' operator is a remainder, not a true modulo for negative
-// numbers. For example, -1 % 250 = -1. We want -1 to wrap to 249. Formula:
-// (value % MAX + MAX) % MAX guarantees a positive wrapped index.
-//
-// Never hand-roll this at a call site: `(x + dx % w + w) % w` binds the % to dx
-// alone and is only accidentally correct while |dx| < w.
-int Maze::wrapX(int x) const { return (x % m_width + m_width) % m_width; }
-
-int Maze::wrapY(int y) const { return (y % m_height + m_height) % m_height; }
-
-int Maze::toGridX(float worldX) const {
-  return static_cast<int>(std::floor(worldX / m_cellSize));
-}
-
-int Maze::toGridY(float worldY) const {
-  return static_cast<int>(std::floor(worldY / m_cellSize));
-}
+// wrapX/wrapY are World's: see world/world.hpp for the modulo note.
 
 // ============================================================================
 // getCell — Read a Cell
 // ============================================================================
 int Maze::getCell(int x, int y) const { return m_grid[getIndex(x, y)]; }
+
+bool Maze::isSolid(int x, int y) const {
+  int i = getIndex(x, y);
+  return m_grid[i] == CELL_WALL || m_items[i] != ItemType::NONE;
+}
+
+bool Maze::isSealedFrom(int x, int y, AreaState side) const {
+  int cell = getCell(x, y);
+  return (side == AreaState::CORRIDOR && cell == CELL_ROOM) ||
+         (side == AreaState::ROOM && cell == CELL_CORRIDOR);
+}
 
 // ============================================================================
 // setCell — Write a Cell

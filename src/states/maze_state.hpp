@@ -9,6 +9,7 @@
 #include "render/item_renderer.hpp"
 #include "raylib.h"
 #include "states/game_state.hpp"
+#include "states/run.hpp"
 #include "world/item_spawner.hpp"
 #include "world/maze.hpp"
 #include "render/maze_renderer.hpp"
@@ -16,16 +17,17 @@
 #include <vector>
 
 
-// The PlayingState represents the core gameplay loop (exploring the maze).
-class PlayingState : public GameState {
+// The underworld: exploring the maze. Borrows the Run for its seed and its
+// player; owns everything that exists only down here.
+class MazeState : public GameState {
 public:
-  // seed of 0 means "pick one from the clock". capture is the headless
-  // harness's hook set (null in the shipping game); blitScale pins the
-  // canvas size so a scripted run's screenshots stay diffable.
-  PlayingState(UIManager &uiManager, DebugOverlay &debugOverlay,
-               unsigned int seed = 0, CaptureSink *capture = nullptr,
-               float blitScale = RenderSettings{}.blitScale);
-  ~PlayingState() override;
+  // capture is the headless harness's hook set (null in the shipping game);
+  // blitScale pins the canvas size so a scripted run's screenshots stay
+  // diffable.
+  MazeState(Run &run, UIManager &uiManager, DebugOverlay &debugOverlay,
+            CaptureSink *capture = nullptr,
+            float blitScale = RenderSettings{}.blitScale);
+  ~MazeState() override;
 
   void onEnter() override;
   void onExit() override;
@@ -74,13 +76,14 @@ private:
   CaptureSink *m_capture;
 
   // --- Core Systems ---
-  unsigned int m_seed;
+  Run &m_run;
+  unsigned int m_seed; // m_run.seed, copied for the RNG initialisers below
   std::mt19937 m_rng;
   // Each regeneration seeds its own RNG from (m_seed, m_regenCount), so the
   // Nth regen of a seed is the same world no matter what happened in between.
   int m_regenCount = 0;
   Maze m_maze;
-  Player m_player;
+  Player &m_player; // m_run.player
   // Scene camera, in CANVAS space: zoom pinned at 1.0, offset = canvas centre.
   Camera2D m_camera{};
   // Canvas = window / blitScale, recomputed each tick (the window resizes).

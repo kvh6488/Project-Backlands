@@ -3,7 +3,7 @@
 // ============================================================================
 // RenderSettings — Tunable presentation values
 // ============================================================================
-// These are read every frame by PlayingState and MazeRenderer, so they must
+// These are read every frame by MazeState and MazeRenderer, so they must
 // exist whether or not the debug overlay does. DebugOverlay edits them through
 // a reference; it does not own them. That keeps the overlay a pure view and
 // makes it removable without taking rendering config with it.
@@ -19,7 +19,7 @@ struct RenderSettings {
   float lightFadeStrength = 1.5f;  // falloff sharpness at the cone edges
   float lightSizeScale = 3.5f;     // cone radius, in tiles
 
-  // Raised when any of the three light values above changes. PlayingState
+  // Raised when any of the three light values above changes. MazeState
   // polls and clears it, then rebuilds the mask texture — regenerating it
   // every frame would be wasteful.
   bool lightSettingsChanged = false;
