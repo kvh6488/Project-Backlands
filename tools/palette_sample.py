@@ -55,6 +55,11 @@ and drifts the palette by a few hexes - it is no longer the same input. To
 re-derive, point SOURCES at the original sheets (docs/palette.md lists them).
 To redraw the images from the approved JSON without sampling, use --render.
 
+The approved palette is no longer only this tool's output: the overworld's 16
+colours were added by hand on top of its 56 (docs/palette.md). A run without
+--render overwrites assets/palette.json and drops them - write a proposal to
+another --out and compare instead.
+
 Requires numpy and Pillow. Deterministic for a given input set and config.
 """
 import argparse
@@ -125,15 +130,6 @@ CONFIGS = {
         ("accent", dict(steps=6, accent=True)),
     ],
 }
-
-# Per-world windows as fractions of a ramp, so they scale with its length:
-# on 8 steps the overworld draws 2-7 and the underworld 0-5; on 12, 3-11 and 0-8.
-WORLDS = {"overworld": (0.25, 1.0), "underworld": (0.0, 0.75)}
-
-
-def window(steps, frac):
-    lo, hi = frac
-    return int(round(lo * steps)), int(round(hi * steps)) - 1
 
 
 # ---- colour maths ---------------------------------------------------------
@@ -279,8 +275,6 @@ def propose(config, hist):
         ramps.append({
             "name": name,
             "share": float(w[idx].sum()),
-            "windows": {} if "accent" in rule else
-                       {k: window(len(picks), f) for k, f in WORLDS.items()},
             "colours": [{"hex": "#%02x%02x%02x" % tuple(cols[idx[i]]),
                          "rgb": cols[idx[i]].tolist(),
                          "L": round(float(L[idx[i]]), 3),
@@ -301,7 +295,7 @@ def error_report(ramps, cols, w, lab):
 # ---- swatch ---------------------------------------------------------------
 
 def draw_swatch(ramps, path):
-    """Labelled ramps. Text and brackets use palette colours, but the ground is
+    """Labelled ramps. Text uses palette colours, but the ground is
     deliberately off-palette (a dull plum no ramp contains) so the darkest
     neutral reads as a block against it. The labels are anti-aliased anyway,
     so quantize.py --check skips this file by name; it is documentation, not
@@ -311,10 +305,8 @@ def draw_swatch(ramps, path):
     by = {r["name"]: r["colours"] for r in ramps}
     ink = tuple(by["neutral"][-1]["rgb"]); dim = tuple(by["neutral"][-3]["rgb"])
     ground = (38, 26, 44)  # off-palette on purpose: see docstring
-    over = tuple(by["yellow" if "yellow" in by else "brown"][-2]["rgb"])
-    under = tuple(by["green"][3]["rgb"])
     width = label_w + max(len(r["colours"]) for r in ramps) * (cell + pad) + pad
-    height = pad + len(ramps) * (cell + 22 + pad) + 30
+    height = pad + len(ramps) * (cell + 22 + pad)
     img = Image.new("RGB", (width, height), ground)
     dr = ImageDraw.Draw(img)
     y = pad
@@ -325,14 +317,7 @@ def draw_swatch(ramps, path):
             dr.rectangle([x, y, x + cell - 1, y + cell - 1], fill=tuple(c["rgb"]))
             dr.text((x, y + cell + 2), c["hex"][1:], fill=ink, font=font)
             dr.text((x, y + cell + 11), f"L{c['L']:.2f}", fill=dim, font=font)
-        if r["name"] != "accent":                # world windows as brackets
-            for key, dy, colour in (("underworld", 3, under), ("overworld", 6, over)):
-                a, b = window(len(r["colours"]), WORLDS[key])
-                x0 = label_w + a * (cell + pad); x1 = label_w + (b + 1) * (cell + pad) - pad
-                dr.line([x0, y - dy, x1, y - dy], fill=colour, width=2)
         y += cell + 22 + pad
-    dr.text((pad, y), "bracket above ramp: yellow = overworld window, green = underworld window",
-            fill=dim, font=font)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     img.save(path)
 

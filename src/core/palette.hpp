@@ -10,8 +10,8 @@
 
 namespace pal {
 
-inline constexpr int neutralSteps = 8;
-inline constexpr Color neutral[8] = {
+inline constexpr int neutralSteps = 9;
+inline constexpr Color neutral[9] = {
     Color{ 20,  21,  23, 255},  //  0 #141517
     Color{ 46,  46,  46, 255},  //  1 #2e2e2e
     Color{ 70,  70,  70, 255},  //  2 #464646
@@ -20,34 +20,44 @@ inline constexpr Color neutral[8] = {
     Color{156, 156, 156, 255},  //  5 #9c9c9c
     Color{189, 189, 189, 255},  //  6 #bdbdbd
     Color{217, 217, 218, 255},  //  7 #d9d9da
+    Color{223, 227, 237, 255},  //  8 #dfe3ed
 };
 
-inline constexpr int greySteps = 8;
-inline constexpr Color grey[8] = {
+inline constexpr int greySteps = 12;
+inline constexpr Color grey[12] = {
     Color{ 29,  28,  39, 255},  //  0 #1d1c27
-    Color{ 56,  56,  71, 255},  //  1 #383847
-    Color{ 71,  72,  88, 255},  //  2 #474858
-    Color{ 87, 100, 119, 255},  //  3 #576477
-    Color{113, 125, 143, 255},  //  4 #717d8f
-    Color{130, 157, 165, 255},  //  5 #829da5
-    Color{166, 183, 198, 255},  //  6 #a6b7c6
-    Color{189, 213, 222, 255},  //  7 #bdd5de
+    Color{ 43,  43,  69, 255},  //  1 #2b2b45
+    Color{ 56,  56,  71, 255},  //  2 #383847
+    Color{ 71,  72,  88, 255},  //  3 #474858
+    Color{ 65,  86,  75, 255},  //  4 #41564b
+    Color{ 75,  77, 113, 255},  //  5 #4b4d71
+    Color{ 87, 100, 119, 255},  //  6 #576477
+    Color{113, 125, 143, 255},  //  7 #717d8f
+    Color{130, 157, 165, 255},  //  8 #829da5
+    Color{166, 183, 198, 255},  //  9 #a6b7c6
+    Color{180, 196, 228, 255},  // 10 #b4c4e4
+    Color{189, 213, 222, 255},  // 11 #bdd5de
 };
 
-inline constexpr int brownSteps = 8;
-inline constexpr Color brown[8] = {
+inline constexpr int brownSteps = 13;
+inline constexpr Color brown[13] = {
     Color{ 47,  25,  11, 255},  //  0 #2f190b
     Color{ 74,  42,  25, 255},  //  1 #4a2a19
     Color{102,  59,  39, 255},  //  2 #663b27
     Color{125,  76,  46, 255},  //  3 #7d4c2e
     Color{147,  99,  64, 255},  //  4 #936340
-    Color{177, 122,  78, 255},  //  5 #b17a4e
-    Color{204, 151, 112, 255},  //  6 #cc9770
-    Color{244, 165, 104, 255},  //  7 #f4a568
+    Color{173,  82,  38, 255},  //  5 #ad5226
+    Color{146, 126, 101, 255},  //  6 #927e65
+    Color{177, 122,  78, 255},  //  7 #b17a4e
+    Color{208, 103,  50, 255},  //  8 #d06732
+    Color{201, 131,  33, 255},  //  9 #c98321
+    Color{204, 151, 112, 255},  // 10 #cc9770
+    Color{244, 165, 104, 255},  // 11 #f4a568
+    Color{216, 178, 137, 255},  // 12 #d8b289
 };
 
-inline constexpr int yellowSteps = 12;
-inline constexpr Color yellow[12] = {
+inline constexpr int yellowSteps = 13;
+inline constexpr Color yellow[13] = {
     Color{ 56,  46,  22, 255},  //  0 #382e16
     Color{ 72,  58,  32, 255},  //  1 #483a20
     Color{ 84,  69,  39, 255},  //  2 #544527
@@ -59,29 +69,35 @@ inline constexpr Color yellow[12] = {
     Color{180, 172, 106, 255},  //  8 #b4ac6a
     Color{204, 190, 104, 255},  //  9 #ccbe68
     Color{232, 210, 130, 255},  // 10 #e8d282
-    Color{246, 233, 152, 255},  // 11 #f6e998
+    Color{237, 209, 154, 255},  // 11 #edd19a
+    Color{246, 233, 152, 255},  // 12 #f6e998
 };
 
-inline constexpr int greenSteps = 8;
-inline constexpr Color green[8] = {
+inline constexpr int greenSteps = 12;
+inline constexpr Color green[12] = {
     Color{ 15,  57,  15, 255},  //  0 #0f390f
     Color{ 22,  78,  25, 255},  //  1 #164e19
-    Color{ 60, 103,  35, 255},  //  2 #3c6723
-    Color{ 61, 127,  65, 255},  //  3 #3d7f41
-    Color{118, 150,  60, 255},  //  4 #76963c
-    Color{105, 167,  84, 255},  //  5 #69a754
-    Color{145, 202,  81, 255},  //  6 #91ca51
-    Color{183, 240, 116, 255},  //  7 #b7f074
+    Color{  6,  92,  57, 255},  //  2 #065c39
+    Color{ 60, 103,  35, 255},  //  3 #3c6723
+    Color{ 27, 119,  88, 255},  //  4 #1b7758
+    Color{ 61, 127,  65, 255},  //  5 #3d7f41
+    Color{106, 134,  87, 255},  //  6 #6a8657
+    Color{118, 150,  60, 255},  //  7 #76963c
+    Color{123, 150, 100, 255},  //  8 #7b9664
+    Color{105, 167,  84, 255},  //  9 #69a754
+    Color{145, 202,  81, 255},  // 10 #91ca51
+    Color{183, 240, 116, 255},  // 11 #b7f074
 };
 
-inline constexpr int blueSteps = 6;
-inline constexpr Color blue[6] = {
+inline constexpr int blueSteps = 7;
+inline constexpr Color blue[7] = {
     Color{ 21,  45,  92, 255},  //  0 #152d5c
     Color{ 47,  72, 118, 255},  //  1 #2f4876
-    Color{ 59, 101, 144, 255},  //  2 #3b6590
-    Color{ 78, 145, 175, 255},  //  3 #4e91af
-    Color{110, 167, 198, 255},  //  4 #6ea7c6
-    Color{145, 214, 232, 255},  //  5 #91d6e8
+    Color{ 15,  95,  91, 255},  //  2 #0f5f5b
+    Color{ 59, 101, 144, 255},  //  3 #3b6590
+    Color{ 78, 145, 175, 255},  //  4 #4e91af
+    Color{110, 167, 198, 255},  //  5 #6ea7c6
+    Color{145, 214, 232, 255},  //  6 #91d6e8
 };
 
 inline constexpr int accentSteps = 6;
@@ -94,7 +110,7 @@ inline constexpr Color accent[6] = {
     Color{149, 218,  65, 255},  //  5 #95da41
 };
 
-inline constexpr int totalColours = 56;
+inline constexpr int totalColours = 72;
 
 // Every colour in strip order, for the conformance test and any future
 // palette texture upload.
