@@ -1,0 +1,24 @@
+# Y-sort check: the player in front of and behind furniture, on the
+# "furniture_room" fixture (seed 1). Spawn (122,72); tables on (122-123,70)
+# and (124-125,72); a side-on cupboard on (117,71).
+# Presentation scenario: compare scene.png against the old fixed layers,
+# where every piece of furniture drew over the player. Collision keeps the
+# overlaps to a few pixels, so only in_front_of_table differs from them.
+seed 1
+window 1280 720
+scale 1.5
+
+checkpoint spawn
+
+hold W 30                     # up against the front edge of the (122,70) table
+checkpoint in_front_of_table  # player is lower: its hat now covers the table leg
+
+hold D 40                     # along row 71, over the (124,72) table
+checkpoint behind_table       # player is higher: the table hides its feet
+
+hold A 140                    # left until the cupboard on (117,71) stops us
+checkpoint beside_cupboard
+
+hold S 8                      # feet drop below the cupboard's base
+checkpoint below_cupboard
+end

@@ -2,6 +2,7 @@
 
 #include "core/viewport.hpp"
 #include "world/maze.hpp"
+#include "world/world.hpp"
 #include <cmath>
 #include <raylib.h>
 
@@ -30,12 +31,12 @@ struct ViewBounds {
   // pixels - the canvas for the scene passes, the window for overlays drawn
   // after the blit. It is never GetScreenWidth(): that is the window, and
   // the scene camera does not see the window.
-  static ViewBounds fromCamera(const Maze &maze, const Camera2D &camera,
+  static ViewBounds fromCamera(const World &world, const Camera2D &camera,
                                const Viewport &view) {
     Vector2 topLeft = GetScreenToWorld2D({0.0f, 0.0f}, camera);
     Vector2 bottomRight = GetScreenToWorld2D(view.size(), camera);
 
-    int cellSize = maze.getCellSize();
+    int cellSize = world.getCellSize();
     return ViewBounds{(int)std::floor(topLeft.x / cellSize) - 1,
                       (int)std::ceil(bottomRight.x / cellSize) + 1,
                       (int)std::floor(topLeft.y / cellSize) - 3,
@@ -45,6 +46,11 @@ struct ViewBounds {
   bool contains(int x, int y) const {
     return x >= startX && x <= endX && y >= startY && y <= endY;
   }
+
+  // The base-Y rows (world px) a sprite standing in these cells can have:
+  // the bottom edge of the top row through the bottom edge of the last.
+  int minBaseY(int cellSize) const { return (startY + 1) * cellSize; }
+  int maxBaseY(int cellSize) const { return (endY + 1) * cellSize; }
 };
 
 // ============================================================================

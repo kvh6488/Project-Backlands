@@ -91,6 +91,7 @@ private:
   MazeRenderer m_renderer;
   ItemRenderer m_itemRenderer;
   PlayerRenderer m_playerRenderer;
+  DrawQueue m_drawQueue; // the Y-sorted pass: player + furniture
   ItemSpawner m_itemSpawner;
 
   // --- Visual Effects ---

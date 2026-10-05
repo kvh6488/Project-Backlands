@@ -1,6 +1,8 @@
 #pragma once
 #include "core/viewport.hpp"
+#include "render/draw_queue.hpp"
 #include "world/maze.hpp"
+#include "world/world.hpp"
 #include <raylib.h>
 
 // ============================================================================
@@ -13,11 +15,12 @@
 //
 // Design Pattern: Strategy (separating rendering concerns by domain).
 //
-// Crucially, items are rendered in a SEPARATE pass AFTER the player, so
-// furniture (cupboards, etc.) renders ON TOP of the player sprite. This
-// gives the visual effect of the player walking "behind" tall furniture.
+// World items do not draw themselves in a fixed order any more: collect()
+// pushes each visible one into the frame's DrawQueue at the bottom edge of its
+// floor cell, and the queue interleaves them with the player by base Y. So the
+// player walks behind a cupboard from above and in front of it from below.
 // ============================================================================
-class ItemRenderer {
+class ItemRenderer : public Drawer {
 public:
   ItemRenderer();
   ~ItemRenderer();
@@ -25,16 +28,15 @@ public:
   void loadTextures();
 
   // --- World-Space Rendering ---
-  // Two layers around the player sprite. A front-facing cupboard stands
-  // against the top wall, so the player is always in front of it and it is
-  // drawn BEHIND; everything else (side-on cupboards, tables, barrels) draws
-  // in FRONT so the player walks behind tall furniture.
-  enum class Layer { BEHIND_PLAYER, IN_FRONT_OF_PLAYER };
-  void render(const Maze &maze, const Camera2D &camera,
-              const Viewport &canvas, AreaState state, Layer layer) const;
+  // Pushes every item the camera can see into `queue`, keyed by the bottom
+  // edge of its floor cell. In the maze the room/corridor visibility rule
+  // applies (isCellRenderable); on the surface every item in view draws.
+  // Binds `world` until the queue is flushed.
+  void collect(const World &world, const Camera2D &camera,
+               const Viewport &canvas, AreaState state, DrawQueue &queue);
 
-  // A cupboard with a wall above it faces the room; the rest lean sideways.
-  static bool isFrontFacingCupboard(const Maze &maze, int x, int y);
+  // Drawer: draws the item standing on cell (x, y) of the bound world.
+  void drawQueued(int x, int y) const override;
 
   // Draws the magic book of maps on its table, as a SEPARATE pass.
   //
@@ -79,7 +81,7 @@ private:
   // magic book overlay pass need the destination rect, and the two variants
   // (grey / non-grey, chosen by a spatial hash) have DIFFERENT pixel
   // dimensions - so computing it in two places silently misplaces the book.
-  TableSprite computeTableSprite(const Maze &maze, int x, int y) const;
+  TableSprite computeTableSprite(const World &world, int x, int y) const;
 
   // Maps the atlas name an ItemDefinition carries to the loaded handle.
   Texture2D atlasFor(UiTexture which) const;
@@ -89,4 +91,6 @@ private:
   Texture2D m_postApocIconsTexture;
   Texture2D m_workshopPropIcons; // the two 1:1 prop cut-outs the bag shows
   Texture2D m_ritualTexture;
+
+  const World *m_world = nullptr; // bound by collect(), read by drawQueued()
 };

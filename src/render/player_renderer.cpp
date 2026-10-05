@@ -1,6 +1,7 @@
 #include "render/player_renderer.hpp"
 #include "core/asset_load.hpp"
 #include "core/grid.hpp"
+#include <cmath>
 #include <iostream>
 
 PlayerRenderer::PlayerRenderer()
@@ -58,13 +59,27 @@ void PlayerRenderer::update(float dt, const Player &player) {
 // The FacingDirection enum values (0–3) map directly to spritesheet rows,
 // so the enum value is the tile row.
 // ============================================================================
-void PlayerRenderer::render(const Player &player) const {
-  // Source tile: column = current animation frame (0-3), row = facing
-  // direction (0-3). One tile, one cell, centred on the player's position.
+Rectangle PlayerRenderer::destFor(const Player &player, int frame) {
+  // Source tile: column = animation frame (0-3), row = facing direction (0-3).
+  int row = static_cast<int>(player.getFacingDirection());
+  return grid::destFor(grid::srcTile(frame, row), player.getPosition().x,
+                       player.getPosition().y);
+}
+
+void PlayerRenderer::collect(const Player &player, DrawQueue &queue) {
+  m_subject = &player;
+  // The sprite is drawn centred on the position, so its feet are half a
+  // sprite below it.
+  Rectangle dest = destFor(player, m_currentFrame);
+  queue.push((int)std::floor(player.getPosition().y + dest.height / 2.0f),
+             *this);
+}
+
+void PlayerRenderer::drawQueued(int, int) const {
+  const Player &player = *m_subject;
   int row = static_cast<int>(player.getFacingDirection());
   Rectangle source = grid::srcTile(m_currentFrame, row);
-  Rectangle dest =
-      grid::destFor(source, player.getPosition().x, player.getPosition().y);
+  Rectangle dest = destFor(player, m_currentFrame);
   Vector2 origin = {dest.width / 2.0f, dest.height / 2.0f};
 
   DrawTexturePro(m_playerTexture, source, dest, origin, 0.0f, WHITE);

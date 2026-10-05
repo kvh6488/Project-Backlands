@@ -556,11 +556,15 @@ void MazeState::render(const InputState &in) {
   BeginMode2D(m_camera);
   m_renderer.render(m_maze, m_camera, m_canvas, m_player.getAreaState(),
                     m_renderSettings.showGenerationZones);
-  m_itemRenderer.render(m_maze, m_camera, m_canvas, m_player.getAreaState(),
-                        ItemRenderer::Layer::BEHIND_PLAYER);
-  m_playerRenderer.render(m_player);
-  m_itemRenderer.render(m_maze, m_camera, m_canvas, m_player.getAreaState(),
-                        ItemRenderer::Layer::IN_FRONT_OF_PLAYER);
+  // Everything that stands on the floor, drawn back to front by base Y. The
+  // player is pushed first so that on an exact tie the furniture wins, as it
+  // did under the old fixed layers.
+  ViewBounds view = ViewBounds::fromCamera(m_maze, m_camera, m_canvas);
+  m_drawQueue.begin(view.minBaseY(grid::CELL), view.maxBaseY(grid::CELL));
+  m_playerRenderer.collect(m_player, m_drawQueue);
+  m_itemRenderer.collect(m_maze, m_camera, m_canvas, m_player.getAreaState(),
+                         m_drawQueue);
+  m_drawQueue.flush();
   EndMode2D();
 
   if (m_renderSettings.flashlightEnabled &&

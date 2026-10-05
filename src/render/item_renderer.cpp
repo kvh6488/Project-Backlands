@@ -43,159 +43,156 @@ ItemRenderer::~ItemRenderer() {
 }
 
 // ============================================================================
-// render — World-Space Item Pass
+// collect — World-Space Item Pass
 // ============================================================================
-// This is called AFTER the player renderer inside BeginMode2D, so items
-// draw on top of the player sprite. This gives the visual effect of the
-// player walking "behind" tall furniture like cupboards.
-//
-// Uses the same frustum culling approach as MazeRenderer — only items
-// within the visible screen region are drawn.
+// Uses the same frustum cull as MazeRenderer — only items within the visible
+// screen region are queued. Every item stands on its own floor cell, so its
+// base Y is that cell's bottom edge.
 //
 // Time Complexity: O(V) where V = number of visible cells on screen.
 // Each cell is an O(1) lookup into the grid-parallel item array.
 // ============================================================================
-bool ItemRenderer::isFrontFacingCupboard(const Maze &maze, int x, int y) {
-  return maze.getItem(x, y) == ItemType::CUPBOARD &&
-         maze.getCell(x, y - 1) == Maze::CELL_WALL;
-}
-
-void ItemRenderer::render(const Maze &maze, const Camera2D &camera,
-                          const Viewport &canvas, AreaState state,
-                          Layer layer) const {
-  // --- FRUSTUM CULLING (shared with MazeRenderer) ---
-  ViewBounds view = ViewBounds::fromCamera(maze, camera, canvas);
+void ItemRenderer::collect(const World &world, const Camera2D &camera,
+                           const Viewport &canvas, AreaState state,
+                           DrawQueue &queue) {
+  m_world = &world;
+  const Maze *maze = world.asMaze();
+  ViewBounds view = ViewBounds::fromCamera(world, camera, canvas);
 
   for (int y = view.startY; y <= view.endY; ++y) {
     for (int x = view.startX; x <= view.endX; ++x) {
+      if (world.getItem(x, y) == ItemType::NONE)
+        continue;
       // Floor check plus the room/corridor visibility rule, shared with the
       // magic book pass so the two cannot drift apart.
-      if (!isCellRenderable(maze, x, y, state))
+      if (maze && !isCellRenderable(*maze, x, y, state))
         continue;
-
-      // Layer split: only front-facing cupboards go behind the player.
-      bool behind = isFrontFacingCupboard(maze, x, y);
-      if (behind != (layer == Layer::BEHIND_PLAYER))
-        continue;
-
-      // --- Item Rendering (Grid-Parallel Switch) ---
-      // O(1) lookup per cell. Adding a new item type means adding a
-      // new case here — no need to touch any other rendering code.
-      switch (maze.getItem(x, y)) {
-      case ItemType::TOXIC_WASTE: {
-        // The plain workshop barrel, sold as toxic by a fluorescent green
-        // glow rather than a badge. Additive halo behind, then the barrel,
-        // then a tighter halo over it so the drum itself reads as lit.
-        Rectangle cell = grid::cellRect(x, y);
-        int cx = (int)(cell.x + cell.width / 2.0f);
-        int cy = (int)(cell.y + cell.height / 2.0f);
-
-        BeginBlendMode(BLEND_ADDITIVE);
-        DrawCircleGradient(cx, cy, grid::CELL * 1.1f, Fade(theme::radiationGlow, 45 / 255.0f),
-                           Fade(theme::radiationGlow, 0.0f));
-        EndBlendMode();
-
-        DrawTexturePro(m_postApocWorkshopTextures, grid::srcTile(2, 6), cell,
-                       {0, 0}, 0.0f, WHITE);
-
-        BeginBlendMode(BLEND_ADDITIVE);
-        DrawCircleGradient(cx, cy, grid::CELL * 0.45f, Fade(theme::radiationGlow, 55 / 255.0f),
-                           Fade(theme::radiationGlow, 0.0f));
-        EndBlendMode();
-        break;
-      }
-      case ItemType::MUSHROOM:
-      case ItemType::MAGIC_MUSHROOM: {
-        // Pseudo-random consistent hash picks one of the six variants: the
-        // sheet is 3 columns wide, normal mushrooms on rows 0-1, magic ones
-        // on rows 2-3.
-        int tileIndex = (x * 73 + y * 37) % 6;
-        int tx = tileIndex % 3;
-        int ty = (maze.getItem(x, y) == ItemType::MUSHROOM)
-                     ? (tileIndex / 3)
-                     : (tileIndex / 3) + 2;
-
-        DrawTexturePro(m_mushroomTexture, grid::srcTile(tx, ty),
-                       grid::cellRect(x, y), {0, 0}, 0.0f, WHITE);
-        break;
-      }
-      case ItemType::CUPBOARD: {
-        // --- Context-Aware Texture Selection ---
-        // The cupboard's appearance depends on which wall it leans against.
-        // Priority: wall above > wall right > wall left.
-        // This is a simplified version of the bitmasking autotile pattern
-        // used for walls, but only checking 3 directions.
-        bool wallAbove = maze.getCell(x, y - 1) == Maze::CELL_WALL;
-        bool wallRight = maze.getCell(x + 1, y) == Maze::CELL_WALL;
-        bool wallLeft = maze.getCell(x - 1, y) == Maze::CELL_WALL;
-
-        // Every cupboard is one 1x2 tile column on the workshop sheet. The
-        // sheet lays its variants out on a grid: open states are the next
-        // columns along, the red colourway is four rows down.
-        //   front, blue  (14, 6)   side, blue  (15, 8)
-        //   front, red   (14, 10)  side, red   (15, 12)
-        int col = 14, row = 6;
-        bool isSideways = !wallAbove && (wallRight || wallLeft);
-        bool flipH = false;
-
-        // Cupboards against the top wall are nudged upward so they sit
-        // flush against the rendered wall face (which projects downward via
-        // the Zelda-style wall system). Measured in art pixels.
-        int liftArtPx = 0;
-
-        if (wallAbove) {
-          liftArtPx = 7;
-        } else if (isSideways) {
-          // The side sprite hugs the right edge of its tile, so it leans on
-          // a wall to the right as drawn; a negative source width flips it
-          // (Raylib convention) to lean left instead.
-          col = 15;
-          row = 8;
-          flipH = wallLeft && !wallRight;
-        }
-        // No wall at all cannot happen given the spawn rules; falls through
-        // to the front-facing sprite.
-
-        // --- Color Variant Logic ---
-        // Deterministically pick red or blue based on coordinates
-        unsigned int hash = (unsigned int)(x * 73856093 ^ y * 19349663);
-        if (hash % 2 == 0) {
-          row += 4;
-        }
-
-        // --- Open Cupboard Logic ---
-        if (maze.getItemState(x, y) == 1) { // 1 = open
-          // Sideways cupboards have one open sprite regardless of contents;
-          // front-facing ones show either stocked shelves or bare ones.
-          col += (!isSideways && maze.isCupboardEmpty(x, y)) ? 2 : 1;
-        }
-
-        Rectangle cupSrc = grid::srcTile(col, row, 1, 2);
-        Rectangle dest = grid::standingOn(cupSrc, x, y);
-        dest.y -= liftArtPx * grid::WORLD_SCALE;
-        if (flipH) {
-          cupSrc.width = -cupSrc.width;
-        }
-        DrawTexturePro(m_postApocWorkshopTextures, cupSrc, dest, {0, 0}, 0.0f,
-                       WHITE);
-        break;
-      }
-      case ItemType::TABLE: {
-        TableSprite table = computeTableSprite(maze, x, y);
-        if (!table.valid) {
-          break; // Non-root tile (state 0 / 2) - the root draws the whole sprite
-        }
-        DrawTexturePro(m_postApocWorkshopTextures, table.src, table.dest,
-                       {0, 0}, 0.0f, WHITE);
-        // NOTE: the magic book is deliberately NOT drawn here - see
-        // renderMagicBookOverlay(), which runs in a later, shader-exempt pass.
-        break;
-      }
-      case ItemType::NONE:
-      default:
-        break;
-      }
+      queue.push((y + 1) * grid::CELL, *this, x, y);
     }
+  }
+}
+
+void ItemRenderer::drawQueued(int x, int y) const {
+  const World &world = *m_world;
+  const Maze *maze = world.asMaze();
+  // --- Item Rendering (Grid-Parallel Switch) ---
+  // O(1) lookup per cell. Adding a new item type means adding a
+  // new case here — no need to touch any other rendering code.
+  switch (world.getItem(x, y)) {
+  case ItemType::TOXIC_WASTE: {
+    // The plain workshop barrel, sold as toxic by a fluorescent green
+    // glow rather than a badge. Additive halo behind, then the barrel,
+    // then a tighter halo over it so the drum itself reads as lit.
+    Rectangle cell = grid::cellRect(x, y);
+    int cx = (int)(cell.x + cell.width / 2.0f);
+    int cy = (int)(cell.y + cell.height / 2.0f);
+
+    BeginBlendMode(BLEND_ADDITIVE);
+    DrawCircleGradient(cx, cy, grid::CELL * 1.1f, Fade(theme::radiationGlow, 45 / 255.0f),
+                       Fade(theme::radiationGlow, 0.0f));
+    EndBlendMode();
+
+    DrawTexturePro(m_postApocWorkshopTextures, grid::srcTile(2, 6), cell,
+                   {0, 0}, 0.0f, WHITE);
+
+    BeginBlendMode(BLEND_ADDITIVE);
+    DrawCircleGradient(cx, cy, grid::CELL * 0.45f, Fade(theme::radiationGlow, 55 / 255.0f),
+                       Fade(theme::radiationGlow, 0.0f));
+    EndBlendMode();
+    break;
+  }
+  case ItemType::MUSHROOM:
+  case ItemType::MAGIC_MUSHROOM: {
+    // Pseudo-random consistent hash picks one of the six variants: the
+    // sheet is 3 columns wide, normal mushrooms on rows 0-1, magic ones
+    // on rows 2-3.
+    int tileIndex = (x * 73 + y * 37) % 6;
+    int tx = tileIndex % 3;
+    int ty = (world.getItem(x, y) == ItemType::MUSHROOM)
+                 ? (tileIndex / 3)
+                 : (tileIndex / 3) + 2;
+
+    DrawTexturePro(m_mushroomTexture, grid::srcTile(tx, ty),
+                   grid::cellRect(x, y), {0, 0}, 0.0f, WHITE);
+    break;
+  }
+  case ItemType::CUPBOARD: {
+    if (!maze)
+      break; // furniture of the maze; the surface never holds one
+    // --- Context-Aware Texture Selection ---
+    // The cupboard's appearance depends on which wall it leans against.
+    // Priority: wall above > wall right > wall left.
+    // This is a simplified version of the bitmasking autotile pattern
+    // used for walls, but only checking 3 directions.
+    bool wallAbove = maze->getCell(x, y - 1) == Maze::CELL_WALL;
+    bool wallRight = maze->getCell(x + 1, y) == Maze::CELL_WALL;
+    bool wallLeft = maze->getCell(x - 1, y) == Maze::CELL_WALL;
+
+    // Every cupboard is one 1x2 tile column on the workshop sheet. The
+    // sheet lays its variants out on a grid: open states are the next
+    // columns along, the red colourway is four rows down.
+    //   front, blue  (14, 6)   side, blue  (15, 8)
+    //   front, red   (14, 10)  side, red   (15, 12)
+    int col = 14, row = 6;
+    bool isSideways = !wallAbove && (wallRight || wallLeft);
+    bool flipH = false;
+
+    // Cupboards against the top wall are nudged upward so they sit
+    // flush against the rendered wall face (which projects downward via
+    // the Zelda-style wall system). Measured in art pixels.
+    int liftArtPx = 0;
+
+    if (wallAbove) {
+      liftArtPx = 7;
+    } else if (isSideways) {
+      // The side sprite hugs the right edge of its tile, so it leans on
+      // a wall to the right as drawn; a negative source width flips it
+      // (Raylib convention) to lean left instead.
+      col = 15;
+      row = 8;
+      flipH = wallLeft && !wallRight;
+    }
+    // No wall at all cannot happen given the spawn rules; falls through
+    // to the front-facing sprite.
+
+    // --- Color Variant Logic ---
+    // Deterministically pick red or blue based on coordinates
+    unsigned int hash = (unsigned int)(x * 73856093 ^ y * 19349663);
+    if (hash % 2 == 0) {
+      row += 4;
+    }
+
+    // --- Open Cupboard Logic ---
+    if (maze->getItemState(x, y) == 1) { // 1 = open
+      // Sideways cupboards have one open sprite regardless of contents;
+      // front-facing ones show either stocked shelves or bare ones.
+      col += (!isSideways && maze->isCupboardEmpty(x, y)) ? 2 : 1;
+    }
+
+    Rectangle cupSrc = grid::srcTile(col, row, 1, 2);
+    Rectangle dest = grid::standingOn(cupSrc, x, y);
+    dest.y -= liftArtPx * grid::WORLD_SCALE;
+    if (flipH) {
+      cupSrc.width = -cupSrc.width;
+    }
+    DrawTexturePro(m_postApocWorkshopTextures, cupSrc, dest, {0, 0}, 0.0f,
+                   WHITE);
+    break;
+  }
+  case ItemType::TABLE: {
+    TableSprite table = computeTableSprite(world, x, y);
+    if (!table.valid) {
+      break; // Non-root tile (state 0 / 2) - the root draws the whole sprite
+    }
+    DrawTexturePro(m_postApocWorkshopTextures, table.src, table.dest,
+                   {0, 0}, 0.0f, WHITE);
+    // NOTE: the magic book is deliberately NOT drawn here - see
+    // renderMagicBookOverlay(), which runs in a later, shader-exempt pass.
+    break;
+  }
+  case ItemType::NONE:
+  default:
+    break;
   }
 }
 
@@ -210,11 +207,11 @@ void ItemRenderer::render(const Maze &maze, const Camera2D &camera,
 // must be computed in one place only.
 // ============================================================================
 ItemRenderer::TableSprite
-ItemRenderer::computeTableSprite(const Maze &maze, int x, int y) const {
+ItemRenderer::computeTableSprite(const World &world, int x, int y) const {
   TableSprite out = {};
   out.valid = false;
 
-  int state = maze.getItemState(x, y);
+  int state = world.getItemState(x, y);
   // Only the "root" tiles draw (1 = horizontal right, 3 = vertical bottom).
   if (state != 1 && state != 3) {
     return out;

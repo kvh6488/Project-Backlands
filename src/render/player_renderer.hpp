@@ -1,6 +1,7 @@
 #pragma once
 
 #include "entities/player.hpp"
+#include "render/draw_queue.hpp"
 #include <raylib.h>
 
 // ============================================================================
@@ -15,7 +16,7 @@
 // Valley, and classic Zelda — the walk cycle plays at a constant cadence
 // regardless of movement speed.
 // ============================================================================
-class PlayerRenderer {
+class PlayerRenderer : public Drawer {
 public:
   PlayerRenderer();
   ~PlayerRenderer();
@@ -26,11 +27,19 @@ public:
   // Called once per frame from Application::update().
   void update(float dt, const Player &player);
 
-  // Draw the player sprite. Pure read-only — no state mutation.
-  void render(const Player &player) const;
+  // Queues the player at the bottom edge of its sprite - its feet - and binds
+  // it until the queue is flushed.
+  void collect(const Player &player, DrawQueue &queue);
+
+  // Drawer: draws the bound player. Pure read-only — no state mutation.
+  void drawQueued(int, int) const override;
 
 private:
+  // One cell, centred on the player's position.
+  static Rectangle destFor(const Player &player, int frame);
+
   Texture2D m_playerTexture;
+  const Player *m_subject = nullptr; // bound by collect()
 
   // --- Animation State ---
   int m_currentFrame;    // Current frame index in the walk cycle (0–3)
