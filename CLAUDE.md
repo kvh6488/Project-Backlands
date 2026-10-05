@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Project Backrooms is a 2D top-down psychological horror maze game with a custom C++20 engine on Raylib 5.0 + Dear ImGui (via rlImGui). Single-player, no networking, no scripting layer — everything is C++ compiled into one executable.
 
-Design intent lives in `docs/`: [roadmap.md](docs/roadmap.md) is the authoritative phased plan (Phases 0–3 complete, Phase 4 next) and [the_wilderness_update.md](docs/the_wilderness_update.md) is a newer design doc layering an overworld survival hub on top of the maze. Read the roadmap before adding a gameplay system — most features are already specced there.
+Design intent lives in `docs/`: [roadmap.md](docs/roadmap.md) is the authoritative phased plan (Phases 0–3 built the maze; Phase 4 — overworld island generation — is next) and [the_wilderness_update.md](docs/the_wilderness_update.md) is the design reference for the two-world game (overworld survival hub + maze). The roadmap says what gets built when; the wilderness doc says why. Read both before adding a gameplay system — most features are already specced there.
 
 ## Build & Test
 

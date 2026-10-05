@@ -1,8 +1,8 @@
 # The Wilderness — Overworld / Underworld Integration Design
 
-> **Living document** — the design for merging the wilderness survival game into Project Backrooms as a single, coherent title. Last updated: **05-09-2026**.
+> **Living document** — the design for merging the wilderness survival game into Project Backrooms as a single, coherent title. Last updated: **05-10-2026**.
 >
-> This document does **not** replace [roadmap.md](roadmap.md). It defines the combined game's structure and lists, at the end, exactly which existing roadmap items it changes. Phase numbering and re-planning will follow separately.
+> This is the **design reference**: why the game is shaped the way it is. The **plan** — what gets built and in what order — is [roadmap.md](roadmap.md), which has absorbed this document's changes (§17).
 
 ---
 
@@ -137,7 +137,7 @@ Entrances are **discovered, plural, and varied**. Finding a new one is real prog
 |---|---|
 | **The sinkhole / hole in the ground** | **One-way. You fall in and you cannot climb out.** Easy to enter — often by accident — and the entire problem becomes finding another way up. The most Backrooms-appropriate entrance in the game. |
 | **Seasonal entrances** | Only accessible or even *visible* in certain seasons. A service door swamped by spring melt and frozen shut in winter, passable only in late summer. A hatch you can only reach when the ground is frozen hard enough to walk on. This ties surface season directly to maze access and forces the year to have a rhythm: prepare in the warm months, dive in the window, survive winter on what you carried back. |
-| **Ventilation stacks** | Sealed with bolts. Require the screwdriver (already in roadmap Phase 6). |
+| **Ventilation stacks** | Sealed with bolts. Require the screwdriver (roadmap Phase 12 item, needed earlier for this). |
 | **Freight lift** | Needs power. A mid-game unlock that converts a one-way fall into a repeatable, survivable route. |
 
 ---
@@ -189,7 +189,7 @@ This also gives the run a *shape*: early game is bushcraft, mid game is the firs
 
 **This is what makes surface preparation load-bearing.** A dive is provisioned before it starts: smoked and dried food, full waterskins, charged batteries, working gear. The homestead isn't decoration — it's the staging ground, and a badly-prepared dive is lost before you enter.
 
-**Sleep.** Sleeping advances the day and triggers maze regeneration in the shifting zone (as per roadmap Phase 4). Because your bed is now on the surface, **sleeping safely at home still shifts the maze** — reinforcing that the underworld clock cannot be paused. Sleeping *in* the maze needs separate, much riskier treatment: a bedroll in a cleared, barricaded room, high risk, but you don't lose your hard-won position. Failing to sleep still causes sluggishness, hallucinations, and passing out.
+**Sleep.** Sleeping advances the day and triggers maze regeneration in the shifting zone (roadmap Phase 7). Because your bed is now on the surface, **sleeping safely at home still shifts the maze** — reinforcing that the underworld clock cannot be paused. Sleeping *in* the maze needs separate, much riskier treatment: a bedroll in a cleared, barricaded room, high risk, but you don't lose your hard-won position. Failing to sleep still causes sluggishness, hallucinations, and passing out.
 
 **Fire.** Renewable and central above; **nothing burns below** (gas pockets, or simply nothing to burn). This forcibly separates the two toolkits and stops surface solutions from trivialising maze problems.
 
@@ -260,7 +260,7 @@ Two shapes, and they want opposite counterplay:
 
 **Weather and the maze.** An event that fires while you are underground lands entirely on your base — you climb out into the aftermath, the same logistical punishment as seasonal drift (§4.3), and for the same reason. Flooding can also seal or reveal an entrance, which folds straight into §5's seasonal entrances.
 
-> **Note — floods may bring height back, cheaply.** Flooding needs some notion of low ground, which §16 cut along with the heightmap. The likely resolution is that it does not need a real height field: floods **start at lakes and rivers and spread outwards**, so "elevation" is approximately **distance from the nearest water body**, which the world already knows. Rendering is unchanged — the world still draws flat. This would be a *derived scalar used by one system*, not the returning heightmap track. **Needs more looking into**, including whether cabin siting wants a truer height than distance-to-water gives.
+> **Note — floods read the height field (resolved).** Flooding needs a notion of low ground. The world now has one: height is the island's land score (§16), so a flood **fills the lowest ground near water first** and spreads uphill. Cabin siting on high ground is a real height check, not a distance-to-water proxy. Rendering is unchanged — the world still draws flat.
 
 > **Note — the maze is shelter, and that has to not be an exploit.** If you have no shelter, **going underground is a legitimate way to sit out an extreme event** — a real, welcome extra reason to descend, and one that lands right where the design wants pressure: the players with the worst surface position have the strongest reason to go down. The catch is that you are blind down there. You cannot see the current conditions, cannot tell how long the event has left, and cannot judge what you will climb out into.
 >
@@ -363,28 +363,33 @@ Keep the wife thread as a slow, sparse drip. It should never become a fetch ques
 
 ## 16. Terrain, Water & Visual Polish for the Overworld
 
-> **Exploratory — nothing here is fully committed except what's marked settled.** Earlier drafts of this section explored terrain **height** as a rendered field — a heightmap, hydraulic/thermal erosion, quantised cliff bands with footprint accounting, ramps for connectivity, and a posterised hillshade shader to light it in a way that didn't muddy pixel art. **That whole track has been cut.** Height was never a gameplay input (§16.5's old "overhang test" already showed it could only ever be a scalar shading field, not real 3D — no overhangs, no traversal freedom, nothing an inventory or a recipe could touch), and the cost of doing it convincingly — a global erosion pass, cliff-footprint generation, connectivity-guaranteeing ramps, a bespoke lighting shader — was large for a purely visual, non-load-bearing payoff. **The overworld is flat, the same way the maze is flat.** (One caveat since this was written: floods may want a cheap notion of low ground — see the note in §10.2, which resolves it as distance-to-water rather than a revived height field.) Depth comes from mixed-projection sprites (§16.4) and lighting/animation polish (§16.6), not from geometry.
-
-What survives from the original plan is the part that was always gameplay, not geometry: water needs to exist for drinking, fishing, orientation and seasonal freeze/thaw (§8, §14); biomes need to place vegetation and animals sensibly; and the flat world still deserves the rendering effects that don't depend on height at all.
+> **Settled for roadmap Phase 4 (05-10-2026).** The overworld is **an island in a wrapping ocean**, and it has **height** — but height as a *generation and gameplay value*, not rendered relief.
+>
+> Earlier drafts explored height as a rendered field — hydraulic/thermal erosion, quantised cliff bands, connectivity ramps, a posterised hillshade shader. **That rendering track stays cut**: its cost was large for a purely visual payoff. What came back is the cheap part. The island's **land score** — noise minus a falloff from the centre — *is* the height: mountains rise in the middle, the coast is where the score crosses the land threshold. It costs nothing extra to compute, and it does real work: rivers flow downhill (§16.1), temperature falls with altitude (§16.2), floods fill low ground first (§10.2), and siting a camp on high ground means something.
+>
+> **The world still draws flat**, the same way the maze is flat. Height shows only through biome tiles (sand → grass → rock → snow) — no shading, no cliffs, and for now no effect on movement. Depth comes from mixed-projection sprites (§16.4) and lighting/animation polish (§16.6), not from geometry.
 
 ### 16.1 Water bodies: rivers & lakes
 
 Rivers and lakes are staying in the game — they're too load-bearing to cut (drinking water, fishing sites, crossings as route decisions, frozen rivers as winter roads, spring melt as a hazard, and §14's "follow the water downstream" as free orientation in a world where maps are a scarce crafted good).
 
-What's genuinely open is **whether rivers need a simulated flow direction**, and that's worth deciding deliberately rather than defaulting into it:
+**Settled: rivers flow downhill, because the world has height.** The earlier question — authored directional paths vs non-directional noise — dissolved once the land score became the height. Flow is not authored; it falls out of the terrain:
 
-| Approach | What it is | Trade |
-|---|---|---|
-| **A — Authored, directional** | River paths generated as domain-warped curves running from a source region to a lake or the map edge, with an implied downstream direction carried for animation (current, foam drifting one way) and possibly gameplay (freezing solid, a future raft or current push). | Gives back the orientation payoff and the "frozen river as a road" beat. Costs more: a river is then a *connected, planned* object, not a chunk-local decoration (see §16.5). |
-| **B — Non-directional** | Lakes and river-*shaped* noise features (Poisson-seeded blobs, meandering bands) with no consistent flow. | Cheapest — chunk-local, no global planning needed. Reads as scenery you cross rather than geography you navigate by; this is the Minecraft model the original draft dismissed, but in a 2D top-down game with no boats or current-based traversal, "does it actually need to flow" is a fair question, not a concession. |
+- **Rivers** start on high ground and walk to their lowest neighbour, step by step, until they reach the ocean or a lake. Where two meet, they merge. Every river therefore ends at a lake or the ocean *by construction* — no rule has to enforce it.
+- **Lakes** are pits in the height field — local minima where a downhill walk gets stuck. A pit fills into a lake until it overflows, and the river continues from its lowest rim (*priority-flood* depression filling → search `priority flood depression filling`, Red Blob Games `mapgen2`).
+- **Lone lakes** are pits no river ever reaches — still water with nothing feeding it.
 
-Flagged as an open question in §19: does anything in this game actually *consume* flow direction (a raft, a current that pushes the player, water-powered crafting), or is it purely a visual/orientation cue? If the latter, Option A can be faked cheaply — author the path once, animate the texture along it — without ever computing true flow accumulation.
-
-Lakes: Poisson-disc-seeded blob shapes, either standalone or fed by a river's endpoint.
+The direction comes for free, so the payoffs an authored directional river would have bought are all back: "follow the water downstream" for orientation, animated current, frozen rivers as winter roads. River and lake placement runs once at world creation on the coarse grid (§16.5) — a whole-island pass, which the finite island affords.
 
 ### 16.2 Biomes & moisture
 
-Keep the **Whittaker diagram** approach — a 2D lookup of temperature × moisture → biome type (grass, forest, scrub, wetland, tundra…) → search `Whittaker biome diagram`. Without a height field there's no orographic rain shadow to drive moisture, so it comes from a simpler, still-legible model: latitude for temperature, a coarse moisture noise field plus a bonus near rivers/lakes/coast for wetness. Cruder than the elevation-driven version, but still gives a world where biome placement feels governed rather than random, which is the actual payoff — a veteran player learns that grasslands cluster round water and reads an unfamiliar map faster for it.
+Keep the **Whittaker diagram** approach — a 2D lookup of temperature × moisture → biome type → search `Whittaker biome diagram`. It is a table, not an equation: round both inputs into buckets and read `table[t][m]`.
+
+- **Temperature** = base + noise − height. An island ~2k tiles across is too small for latitude to mean anything; altitude does the work instead, so snowy peaks come straight out of the table with no special case. Seasons later shift the whole field up and down, moving the snow line.
+- **Moisture** = a coarse noise field plus a bonus near rivers, lakes and coast.
+- **Height bands** override the table at the extremes: beach along the coast, mountain and snow peak at the top.
+
+Starter set: **ocean, beach, grassland, forest, wetland, mountain, snow peak**; scrub and tundra can follow with seasons. The payoff is a world where biome placement feels governed rather than random — a veteran learns that wetlands cluster round water and the cold is uphill, and reads an unfamiliar island faster for it.
 
 ### 16.3 Distribution: resources & set pieces
 
@@ -412,33 +417,51 @@ Current state:
 
 **What carries across runs is not the map, it is literacy.** Water collects in basins, biomes cluster round it, resources thin out with distance from camp. A veteran reads an unfamiliar map quickly because they understand the generator's logic, not because they've memorised a layout.
 
-**Resolution decoupling still matters, for a smaller reason than before.** The world doesn't need a two-resolution split to afford erosion any more — but it still benefits from one, because the world is meant to be large (§16's original ~8,000–16,000-tile target still stands) and a coarse pass keeps that affordable: biome/moisture assignment and river placement run once, on a coarse grid, at world creation, and are stored in the save; per-chunk detail (tree/rock/resource scatter) is generated on demand from `hash(seed, chunkX, chunkY)` and never stored, exactly as originally planned. The maze's toroidal 1D-array grid is a different representation entirely and shares no world-storage code with this.
+**Settled: a finite island in a wrapping ocean.** The landmass is finite — one large island, plus the islets and outlying islands the falloff mask naturally leaves (kept: coastal gameplay will be expanded later). Around it is **open ocean, at least 500 tiles in every direction**, and the world wraps toroidally like the maze: sail far enough and you come back round to the far shore. The world *seems* infinite, but it is a fixed `W × H`.
 
-**Whether the world is strictly finite now depends on the §16.1 decision.** If rivers stay non-directional (Option B), they're chunk-local noise and place no constraint on how the world is generated — it could in principle tile forever. If rivers go directional (Option A), a connected source-to-outlet path is a global object in the same way flow accumulation used to be, and the world needs the same finite, coarse-grid-then-detail treatment the original erosion argument made. Either way, the design argument for a large-but-finite world stands on its own regardless of the water decision: nomadic seasonal camps (§9), a maze that spawns near you (§5), a wife to find, and ~90 days of surviving in one place all depend on the world being *knowable*, the way Valheim, Don't Starve and Unreal World's worlds are.
+- **The ocean hides the seam.** The wrap edges always fall in open ocean, which is uniform water, so no generator — noise, biomes, rivers, scatter — has to be seamless across it. Only player position, camera culling and the chunk cache need to know the world wraps.
+- **Size.** Start at **~2k tiles across** while the generation mechanisms are built, then grow toward ~8k. The design argument for a large-but-finite world stands: nomadic seasonal camps (§9), a maze that spawns near you (§5), a wife to find, and ~90 days of surviving in one place all depend on the world being *knowable*, the way Valheim, Don't Starve and Unreal World's worlds are.
+- **Spawn inland** — in the mid-height band between coast and mountains, on grassland nearest the centre; never a lake, river or mountain. The peak is the hardest place to start a survival game.
 
-**The edge.** Not a cliff — an abrupt drop reads as an artificial wall, and there's no heightmap to raise one anyway. Leaning **an impassable boundary biome** — dense highland forest, rock scree, whatever reads as "you don't go further" — with the boundary's radius perturbed by low-frequency noise so it's irregular rather than a legible circle. Thematically it's still the mountain ring: an enclosed valley, which is why nobody leaves and why the search for your wife stays local. A coastline is the alternative (prettier, adds a beach biome and fishing) but needs an answer for swimming around the edge. Either way the boundary should sit far enough out that most players never reach it and it stays soft knowledge rather than something bumped into.
+**Crossing the open ocean is a survival challenge, and the wrap is a discoverable secret.** Nothing stops you, but a crossing means provisioning a boat for a long voyage: scurvy from a poor diet, and deep-water fishing as the only food out there. Reaching the far shore and realising where you are is the reward — and an achievement (roadmap §6).
+
+**Resolution decoupling — two layers.** The maze's toroidal 1D-array grid is a different representation entirely and shares no world-storage code with this.
+
+| | Coarse grid | Chunks |
+|---|---|---|
+| Resolution | 1 cell per 8×8 tiles (~256×256 at 2k) | Every tile, in 32×32-tile chunks |
+| Holds | Biomes, lakes, the river network — anything needing a whole-island pass | Trees, rocks, bushes, resources |
+| Built | Once, at world creation | On demand from `hash(seed, chunkX, chunkY)` when near the camera |
+| Stored | Yes — it's small | No — discarded when far away |
+
+Height itself is stored in neither: it is a pure function of position and seed, computed wherever it's needed. Two consequences of regenerating chunks:
+
+- **Player changes are a sparse diff.** A felled tree would grow back on regeneration, so anything the player alters is kept in a map keyed by tile and re-applied after the chunk is rebuilt (the same pattern as the maze's `m_itemStates`). Only what the player touched costs memory.
+- **Poisson spacing across borders.** Two chunks generated independently can each put a tree at their shared edge. A chunk also regenerates its neighbours' points — cheap, because they're deterministic — so minimum spacing holds across borders.
+
+Generation constants are compile-time: the island is built once before the player loads in, so there is nothing to tune live.
 
 ### 16.6 Visual polish & effects — where the payoff actually is
 
-With height off the table, this is now the section carrying the overworld's visual ambition, and it's worth treating as the real plan rather than a leftover list. Roughly in order of payoff per line of code:
+With rendered height off the table, this is the section carrying the overworld's visual ambition, and it's worth treating as the real plan rather than a leftover list. Roughly in order of payoff per line of code:
 
-- **Palette unification + atlas JSON.** The current sprite sheets come from several artists with different palettes; snapping everything to one shared ramp does more for the game's look than any single new asset, and it's a prerequisite for the lighting work below reading cleanly.
+- **Palette unification** — ✅ done: the 56-colour master palette (`docs/palette.md`). It was sampled mostly from underworld art, so the overworld pack sheets need a test quantize before they enter `assets/`, and possibly a palette extension.
 - **Y-sorted render queue.** The current draw order is three fixed layers (maze → player → items in `playing_state.cpp` ~L432-435), fine for a tile maze but not for a forest where trees, rocks, the dog, animals and the player need to interleave with each other. Collect drawables into one queue, sort by base Y in world pixels (not tile row, or entities pop between tiles) — `O(k log k)`, or `O(k)` with a bucket sort since baseY is bounded by screen height.
 - **8-bit autotiling.** The existing `tileMap[16]` is a 4-bit cardinal-only mask, fine for solid walls; biome borders (grass/sand/water) need the corner-aware 47-tile "blob" set or diagonal transitions look wrong.
 - **Banded/posterised lighting.** The old hillshade-specific version of this trick is gone with the heightmap, but the underlying principle still applies everywhere a continuous light term meets pixel art: quantise into 3-5 discrete steps and map each to a chosen palette colour rather than a continuous multiply, so day/night transitions and torchlight shade in clean bands instead of muddy in-betweens. → search `posterized lighting pixel art`, `pixel art palette ramp shading`.
 - **Day/night colour ramp**, using the banding above.
 - **Weather** — rain, fog, snow, a fog-density uniform. Turns the same terrain into a visibly different place and plugs straight into seasons and temperature. This is also the **only channel the Tier 0 player has for reading an incoming extreme event** (§10.3), so intensity has to be legible and its *rate of change* readable — these effects are gameplay, not decoration.
 - **Wind sway** — offset the upper pixels of grass and tree sprites by `sin(time + worldPos)`. Roughly twenty lines, and the world stops feeling like a diorama.
-- **Animated water with edge foam** — the direct payoff of §16.1's rivers/lakes; even non-directional water reads as alive once it animates.
+- **Animated water with edge foam** — the direct payoff of §16.1's rivers/lakes; river current animates downhill, the way the water actually flows.
 - **Ambient particles** (pollen, leaves, snow, fireflies) and per-biome colour grading.
 
 ### 16.7 A staged path
 
 | Stage | Work | Payoff |
 |---|---|---|
-| **0** | Palette unification + atlas JSON. | Unblocks everything else; fixes existing asset incoherence. |
-| **1** | Biome/moisture assignment + water placement (coarse grid), per-chunk detail scatter. | The world exists and reads as governed rather than random. |
-| **2** | Render polish pass — Y-sort, autotiling, banded lighting/day-night, weather, wind sway, animated water, particles, per-biome grading. | This *is* the visual identity of the overworld. No further stages are planned — there's no elevation pass waiting behind this one. |
+| **0** ✅ | Palette unification. | Unblocks everything else; fixes existing asset incoherence. |
+| **1** | Island height field, lakes and downhill rivers, biomes (coarse grid), per-chunk detail scatter, Y-sort, autotiling — **roadmap Phase 4**. | The world exists and reads as governed rather than random. |
+| **2** | Render polish pass — banded lighting/day-night, weather, wind sway, animated water, particles, per-biome grading — **roadmap Phase 9**. | This *is* the visual identity of the overworld. No rendered-relief pass is planned behind it. |
 
 ### 16.8 Reference games
 
@@ -447,33 +470,14 @@ With height off the table, this is now the section carrying the overworld's visu
 | **Unreal World** | The direct genre inspiration, now also the closest structural match: fixed finite world, rivers and lakes that structure travel, fishing and settlement, drawn in very plain top-down tiles. No elevation-driven relief. |
 | **Necesse** | Closest genre and aesthetic sibling (2D top-down pixel survival, procgen biomes) — its terrain is flat, which used to be a limitation to note and is now simply the model. |
 | **Stardew Valley** | Reference for *considered* flat pixel art — palette discipline, readable tile borders, mixed-projection props — with the cliff-specific lesson dropped since there's no heightmap here. |
-| **Minecraft** | The counter-example for directional rivers (they wander, dead-end, never consistently reach an ocean, and nobody navigates by them) — but a fair *model* if §16.1 settles on Option B, since this game has no boats or current-based traversal either. |
-| **Factorio** | Noise-blob water, correctly so — water there is purely an obstacle. Useful reminder that directional flow only pays for itself when something in the game actually consumes the direction. |
+| **Minecraft** | The counter-example for rivers: they wander, dead-end, never consistently reach an ocean, and nobody navigates by them. Downhill drainage (§16.1) is what avoids that. |
+| **Red Blob Games — mapgen2 / "making maps with noise"** | Not a game, but the closest technical reference: falloff island masks, elevation-driven biomes, and drainage. |
 
 ---
 
 ## 17. What This Changes in the Existing Roadmap
 
-Deltas against [roadmap.md](roadmap.md). Nothing below is deleted — it's relocated or reframed.
-
-| Roadmap item | Change |
-|---|---|
-| **Vision (§1)** | Game is now two worlds, hub-and-spoke. Maze is one half, not the whole game. |
-| **Permadeath (Phase 4)** | Unchanged in severity — still a full reset from any death, in either world. Now explicitly covers surface death. Most surface threats cripple rather than kill; extreme weather (§10) can kill outright, gated on there having been a counterplay the player could have built. |
-| **No saves / no pausing (Phase 4, §1)** | Flagged as likely to change. If saving is added: single slot, wiped on death, and **only possible at a dedicated overworld camp** — never in the maze. No-pause in the maze likely survives regardless. |
-| **Day counter (Phase 4)** | Stays a single counter from Day 0 of the run — score and unlock gates read it directly, including the Day 20 entrance-spawn gate. Surface reads it cyclically (seasons). **Maze difficulty no longer reads it at all** — escalation is event-anchored in three stages: nothing until you find an entrance, slow/linear from discovery, exponential from first entry. One hidden accumulator (`seasonalDrift`) makes seasons run fast while below. |
-| **Sleep (Phase 4)** | Bed moves to the surface. Sleeping above still shifts the maze. Maze sleep becomes a separate high-risk mechanic. |
-| **Base placement (Phase 4)** | Splits in two: nomadic seasonal surface shelter (camp → shelter → cabin, with maintenance), and maze forward camps under the existing placement rules. Explicitly no mega-base. |
-| **Lotka-Volterra (Phase 4)** | Repurposed to the **surface ecosystem** — real predator/prey populations (wolves and deer) rising and falling across seasons, so over-hunting a valley genuinely depletes it. A more honest use of the model than mob spawn caps. |
-| **Crafting (Phases 3/5)** | Splits into two tiers: abundant-but-slow surface bushcraft, and scarce-but-powerful old-world tech. Chemical lab and hydroponics stay underground as renewable production anchors. Durability + repair table added. |
-| **Torch/battery (Phase 5)** | Elevated to a core asymmetry. Fire above, batteries below, batteries only made in the maze's chemical lab. |
-| **Maps (Phase 3)** | Existing maze maps unchanged. New category: surface survey maps found in the archive. |
-| **Dog (Phase 6)** | Promoted from "advanced system" to a mid-game surface unlock that can be taken below. |
-| **Radiation (Phase 3)** | Stays entirely underground. Explicitly does **not** surface. |
-| **New: wilderness half** | Terrain/biome generation, seasons, weather, hunting, fishing, foraging, shelter building and maintenance, temperature — all new, and not yet phased. Generation and rendering approach explored in §16 (flat, no elevation — water, biomes and rendering polish only). |
-| **New: extreme weather (§10)** | Roughly monthly flood / blizzard / heatwave-into-bushfire / windstorm / drought events, justified by the 2100 setting. Refines the §6 fairness rule rather than obeying it as written: events **can** kill outright, but each has a built counterplay (boat, shelter, firebreak, stored water), so surface death stays self-inflicted — through preparation rather than reflex. The maze is still the deadlier half. Sits on top of the seasonal weather in §16.6, which becomes the Tier 0 warning channel. |
-| **New: weather station** | A late-game maze-salvage item (computer + satellite dish) installed in a surface shelter. Level 1 gives conditions and prediction; Level 2 gives a 10-in-game-minute warning readable only at the terminal. Another standing draw on the battery economy, and the second clear case (after survey maps) of underworld tech paying out on the surface. |
-| **Timeline** | ~105 days is obsolete. Multi-year project; phases need re-planning from scratch. |
+**Applied (05-10-2026).** The deltas this section used to list have been folded into [roadmap.md](roadmap.md): the vision is two worlds, the phases from 4 onward are re-planned around the overworld, the items table carries a *World* column, and the ~105-day timeline is gone. The section number is kept so references elsewhere stay valid.
 
 ---
 
@@ -528,12 +532,11 @@ And the framing risk: the surface being genuinely lethal must not flatten the to
 - **What shelter tier qualifies as a save point?** Recommend basic shelter and above, so a bare campfire doesn't count and siting a proper camp is a real decision.
 - **What forces movement across the surface map?** Seasons and resource depletion are the stated drivers. Needs concrete numbers — how fast a valley depletes, how far you must range, how many seasonal camps a run realistically sustains.
 - **Cabin degradation rate.** Fast enough that abandoning one has teeth, slow enough that maintenance isn't a chore. This number decides whether the nomadic loop feels like planning or like babysitting.
-- **Level 2 descent** (roadmap Phase 6) — still in, and now reads as a third layer below the maze. Needs re-siting within the new structure.
+- **Level 2 descent** (roadmap Phase 12) — still in, and now reads as a third layer below the maze. Needs re-siting within the new structure.
 - **Do maze entrance locations persist across the shifting zones,** or can a regeneration event bury the way you came in? (Very good horror, potentially very unfair.)
-- **Do rivers need simulated directional flow, or is an authored source-to-outlet path (or no direction at all) enough?** (§16.1) Turns on whether anything in the game actually consumes flow direction — a raft, a current, water-powered crafting — versus it being purely a visual/orientation cue. This also decides whether the water layer places any constraint on how large or "infinite" the world could be (§16.5).
-- **World size.** ~8,000 tiles across (~33 min to cross) or ~16,000 (~67 min)? Larger costs little at generation time given the coarse/fine split (§16.5), but a world too large for one run to meaningfully explore wastes the biome and water placement work.
-- **Mountain ring or coastline** at the world edge? (§16.5) Leaning mountain ring (as an impassable boundary biome, not a raised heightmap edge), but a coast adds a beach biome and sea fishing.
-- **Tile spec — settled** (autonomous workflow Phases 3 and 5, 2026-09-11). It lives in code as `src/core/grid.hpp` and reads: every sheet is authored at **16 art px per world cell** and drawn at exactly **2×**, so a cell is 32 canvas px and one art pixel is a 2×2 block; sprites address sheets in whole tiles (`grid::srcTile`) and their destination rectangles are derived from the source (`grid::destFor`), so no draw site carries a scale of its own. Tall props stand on their floor cell and grow upward (`grid::standingOn`). The canvas is blitted to the window at 1 / 1.5 / 2 / 3 so an art pixel stays a whole number of screen pixels. Pixel Crawler is natively 16px and needs nothing; a 32-based pack (`Mobs/`) must be halved with `tools/downsample_sheet.py` before it enters `assets/`. Still open from the original question: the 3/4-view convention and the master palette (Phase 6).
+- **Tile spec — settled** (2026-09-11). It lives in code as `src/core/grid.hpp` and reads: every sheet is authored at **16 art px per world cell** and drawn at exactly **2×**, so a cell is 32 canvas px and one art pixel is a 2×2 block; sprites address sheets in whole tiles (`grid::srcTile`) and their destination rectangles are derived from the source (`grid::destFor`), so no draw site carries a scale of its own. Tall props stand on their floor cell and grow upward (`grid::standingOn`). The canvas is blitted to the window at 1 / 1.5 / 2 / 3 so an art pixel stays a whole number of screen pixels. Pixel Crawler is natively 16px and needs nothing; a 32-based pack (`Mobs/`) must be halved with `tools/downsample_sheet.py` before it enters `assets/`. The master palette is settled too (`docs/palette.md`). Still open from the original question: the 3/4-view convention.
+- **Rivers, world shape, size — settled** (05-10-2026, §16.1/§16.5): downhill rivers with priority-flood lakes; a finite island in a ≥500-tile wrapping ocean; ~2k tiles across to start, growing toward ~8k.
+- **Does height ever affect movement?** Flat and free for now (§16). Revisit with stamina — slower uphill, impassable peaks, or neither.
 - **Engine decision.** At multi-year, two-genre scope, the from-scratch C++/raylib build costs significantly more than it did at the original scope. Not urgent, but should be a conscious choice rather than an inherited default.
 - **Extreme weather frequency and variance.** "About one a month" is the stated target — but is it a fixed cadence, a Poisson process, or season-weighted draws? A fixed cadence is learnable and defuses the tension; pure randomness produces the back-to-back blizzards that end runs unfairly. Probably season-weighted with a minimum gap.
 - **Which counterplay builds actually exist, and what do they cost?** The boat, the firebreak, the water store and the winter-shelter deadline are load-bearing the moment weather can kill (§10.1) — each needs to be cheap enough to be a reasonable ask and expensive enough that skipping it is a real gamble.
@@ -547,15 +550,4 @@ And the framing risk: the surface being genuinely lethal must not flatten the to
 
 ## 20. Copyright & Licensing
 
-The repository currently has **no licence file**. That should be fixed before the project is public or shown around.
-
-**What to add — a proprietary, all-rights-reserved declaration.** A `LICENSE` file at the repo root stating that the source, assets, design documents and game concept are copyright the author, all rights reserved: no copying, modification, redistribution, or commercial use without written permission. Explicitly cover **assets and design docs**, not just code — art, audio, text, lore and this document are separately copyrightable and are the parts most worth stealing.
-
-**Points worth knowing:**
-
-- **Copyright is automatic; the licence file is what makes it unambiguous.** Work with no licence is legally "all rights reserved" by default, but an explicit file removes any argument that it was offered as open source, and gives you something concrete to point at.
-- **Do *not* use MIT/Apache/GPL here.** Every standard open-source licence grants exactly the redistribution rights you're trying to prevent. This needs a custom proprietary notice, not an OSI licence.
-- **A public GitHub repo grants viewing and forking regardless.** GitHub's Terms of Service let any user view and fork public repositories, licence or not. If protecting the work actually matters, **keep the repository private until release** — that is the only practical protection. A licence file deters honest people and gives you legal footing; it does not stop anyone determined.
-- **Third-party dependencies have their own terms you must honour when distributing builds.** Raylib (zlib/libpng), Dear ImGui (MIT), rlImGui, and GoogleTest (BSD-3-Clause) are all permissive and fine for commercial closed-source use, but MIT and BSD-3 **require their copyright notices to be included with binary distributions**. Plan for a `THIRD_PARTY_NOTICES.md` shipped alongside the game. Your own proprietary licence covers your code, not theirs.
-- **Add a short copyright header** to source files, or at minimum a copyright line in `README.md`, so the claim travels with any copied fragment.
-- **Keep dated evidence of authorship.** Git history with real timestamps is already good evidence of when and by whom the work was created. If this ever goes commercial, formal registration is worth looking into in your jurisdiction — that's a question for an actual lawyer, not this document.
+**Moved to roadmap Phase 13** (GUI, Graphical Polish & Licensing): a proprietary all-rights-reserved `LICENSE`, `THIRD_PARTY_NOTICES.md` for Raylib / ImGui / rlImGui / GoogleTest, and a copyright line in the README — done before the project is shown around or released.

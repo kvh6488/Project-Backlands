@@ -2,7 +2,7 @@
 
 A 2D top-down maze survival game built in modern C++20, using Raylib for rendering and Dear ImGui for in-engine debug tooling. The game systems — procedural generation, visibility, lighting, hazards, items and crafting — are written from scratch rather than taken from an engine.
 
-> **Status: work in progress.** Phases 0–3 are complete and Phase 4 is next. The maze generation, visibility, lighting, radiation, item and crafting systems are implemented and playable. Combat, mobs and progression are not yet built. See [Current State](#current-state) for the honest breakdown.
+> **Status: work in progress.** Phases 0–3 (the maze) are complete; Phase 4, overworld island generation, is next. The maze generation, visibility, lighting, radiation, item and crafting systems are implemented and playable. Combat, mobs and progression are not yet built. See [Current State](#current-state) for the honest breakdown.
 
 <!-- TODO: add a GIF here showing maze generation and the flashlight/FOV in motion -->
 
