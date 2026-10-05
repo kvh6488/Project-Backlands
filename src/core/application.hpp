@@ -24,8 +24,8 @@ struct AppConfig {
   // Arms the debug overlay; without it F1 does nothing. See dev/dev_mode.hpp.
   bool devMode = false;
   StartWorld startWorld = StartWorld::MAZE;
-  // Overworld only: start on this tile instead of the island's spawn. Set by
-  // a scenario's `spawn` line, never by the shipping game.
+  // Start on this tile instead of the world's spawn. Set by a scenario's
+  // `spawn` line, never by the shipping game.
   bool hasSpawnOverride = false;
   int spawnX = 0, spawnY = 0;
 

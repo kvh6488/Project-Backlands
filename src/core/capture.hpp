@@ -63,6 +63,8 @@ struct Telemetry {
   int mazeWidth = 0, mazeHeight = 0;
   int nonWallCount = 0, corridorCount = 0;
   int regenCount = 0;
+  int radiationLevel = 0;      // at the player's cell; > 0 arms the flicker
+  float radiationDarkness = 0; // the flicker overlay's alpha this tick
 
   // --- overworld ---
   int worldSize = 0;                      // tiles across (square)

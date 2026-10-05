@@ -24,9 +24,12 @@ public:
   // capture is the headless harness's hook set (null in the shipping game);
   // blitScale pins the canvas size so a scripted run's screenshots stay
   // diffable.
+  // spawnOverride: see game_state.hpp. The area (room or corridor) follows
+  // the cell it names.
   MazeState(Run &run, UIManager &uiManager, DebugOverlay &debugOverlay,
             CaptureSink *capture = nullptr,
-            float blitScale = RenderSettings{}.blitScale);
+            float blitScale = RenderSettings{}.blitScale,
+            const SpawnOverride *spawnOverride = nullptr);
   ~MazeState() override;
 
   void onEnter() override;
@@ -84,6 +87,8 @@ private:
   int m_regenCount = 0;
   Maze m_maze;
   Player &m_player; // m_run.player
+  bool m_hasSpawnOverride;
+  SpawnOverride m_spawnOverride;
   // Scene camera, in CANVAS space: zoom pinned at 1.0, offset = canvas centre.
   Camera2D m_camera{};
   // Canvas = window / blitScale, recomputed each tick (the window resizes).

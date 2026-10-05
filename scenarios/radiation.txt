@@ -1,0 +1,18 @@
+# Radiation flicker under the corridor torch, on the "barrel_room" fixture
+# (seed 38). Starts in a radiated corridor west of the spawn room (the dev
+# `spawn` line) so the light mask and the flicker overlap. The flicker arms
+# after ~4 s in radiation and lasts 2 s; telemetry's maze.radiationDarkness
+# is the overlay alpha at each checkpoint.
+seed 38
+spawn 123 71
+window 1280 720
+scale 1.5
+
+checkpoint calm
+wait 255
+checkpoint flicker_rising
+wait 30
+checkpoint flicker_peak
+wait 30
+checkpoint flicker_falling
+end

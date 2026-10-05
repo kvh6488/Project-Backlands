@@ -14,10 +14,12 @@
 
 MazeState::MazeState(Run &run, UIManager &uiManager,
                      DebugOverlay &debugOverlay, CaptureSink *capture,
-                     float blitScale)
+                     float blitScale, const SpawnOverride *spawnOverride)
     : m_uiManager(uiManager), m_debugOverlay(debugOverlay), m_capture(capture),
       m_run(run), m_seed(run.seed), m_rng(m_seed),
       m_maze(250, 150, grid::CELL, m_seed), m_player(run.player),
+      m_hasSpawnOverride(spawnOverride != nullptr),
+      m_spawnOverride(spawnOverride ? *spawnOverride : SpawnOverride{0, 0}),
       m_itemSpawner(m_rng), m_totalTime(0.0f) {
   m_renderSettings.blitScale = blitScale;
 }
@@ -57,7 +59,16 @@ void MazeState::generateWorld() {
         (closestRoom.y + closestRoom.height / 2.0f) * m_maze.getCellSize();
   }
   // Place, never rebuild: the player belongs to the Run, bag and all.
-  m_player.teleport(playerStartPos, AreaState::ROOM);
+  AreaState area = AreaState::ROOM;
+  if (m_hasSpawnOverride) {
+    const int cell = m_maze.getCellSize();
+    playerStartPos = {m_spawnOverride.x * cell + cell / 2.0f,
+                      m_spawnOverride.y * cell + cell / 2.0f};
+    if (m_maze.getCell(m_spawnOverride.x, m_spawnOverride.y) ==
+        Maze::CELL_CORRIDOR)
+      area = AreaState::CORRIDOR;
+  }
+  m_player.teleport(playerStartPos, area);
 }
 
 void MazeState::onEnter() {
@@ -532,14 +543,17 @@ void MazeState::render(const InputState &in) {
   m_drawQueue.flush();
   EndMode2D();
 
-  if (m_renderSettings.flashlightEnabled &&
-      m_player.getAreaState() == AreaState::CORRIDOR) {
-    m_renderer.drawLightMask(m_canvas);
-  }
-
+  // The flicker goes UNDER the torch mask. The mask multiplies, so whatever
+  // it blacks out stays black; drawn on top, the flicker's near-black (not
+  // pure black) lifted the dark outside the cone into a grey wash.
   if (m_radiationDarknessAlpha > 0.0f) {
     DrawRectangle(0, 0, m_canvas.width, m_canvas.height,
                   Fade(theme::ground, m_radiationDarknessAlpha));
+  }
+
+  if (m_renderSettings.flashlightEnabled &&
+      m_player.getAreaState() == AreaState::CORRIDOR) {
+    m_renderer.drawLightMask(m_canvas);
   }
   EndTextureMode();
   if (m_capture) {
@@ -678,6 +692,8 @@ void MazeState::snapshot(Telemetry &out) const {
   out.nonWallCount = m_maze.getNonWallCount();
   out.corridorCount = m_maze.getCorridorCount();
   out.regenCount = m_regenCount;
+  out.radiationLevel = m_maze.getRadiationLevel(out.playerCellX, out.playerCellY);
+  out.radiationDarkness = m_radiationDarknessAlpha;
 }
 
 // ============================================================================

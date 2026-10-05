@@ -202,6 +202,8 @@ public:
       j.field("nonWallCount", t.nonWallCount);
       j.field("corridorCount", t.corridorCount);
       j.field("regenCount", t.regenCount);
+      j.field("radiationLevel", t.radiationLevel);
+      j.field("radiationDarkness", t.radiationDarkness);
       j.endObject();
     }
 

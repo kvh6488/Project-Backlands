@@ -67,14 +67,14 @@ Application::Application(const AppConfig &config)
   CraftingSystem::init();
 
   // 3. Set Initial State
+  SpawnOverride spawn{config.spawnX, config.spawnY};
+  const SpawnOverride *start = config.hasSpawnOverride ? &spawn : nullptr;
   if (config.startWorld == StartWorld::OVERWORLD) {
-    OverworldState::SpawnOverride spawn{config.spawnX, config.spawnY};
     m_currentState = std::make_unique<OverworldState>(
-        m_run, m_uiManager, m_debugOverlay, m_capture, config.blitScale,
-        config.hasSpawnOverride ? &spawn : nullptr);
+        m_run, m_uiManager, m_debugOverlay, m_capture, config.blitScale, start);
   } else {
     m_currentState = std::make_unique<MazeState>(
-        m_run, m_uiManager, m_debugOverlay, m_capture, config.blitScale);
+        m_run, m_uiManager, m_debugOverlay, m_capture, config.blitScale, start);
   }
   m_currentState->onEnter();
 }

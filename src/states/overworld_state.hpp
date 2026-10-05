@@ -32,12 +32,7 @@
 // ============================================================================
 class OverworldState : public GameState {
 public:
-  // spawnOverride: a dev-only start tile (the --headless `spawn` line), so a
-  // scenario can begin at the wrap seam instead of walking there. Null = the
-  // island's own spawn.
-  struct SpawnOverride {
-    int x, y;
-  };
+  // spawnOverride: see game_state.hpp. The wrap scenario starts at the seam.
   OverworldState(Run &run, UIManager &uiManager, DebugOverlay &debugOverlay,
                  CaptureSink *capture = nullptr,
                  float blitScale = RenderSettings{}.blitScale,

@@ -10,7 +10,7 @@
 //
 //   seed 1788480606      pin the world  (else --seed, else the clock)
 //   world overworld      start world: maze (default) or overworld
-//   spawn 3060 1536      overworld only: start on this tile, not the spawn
+//   spawn 3060 1536      start on this tile, not the world's spawn
 //   window 1280 720      pin the window (default 1280x720)
 //   scale 1.5            blit scale: one of 1 1.5 2 3 (default 1.5)
 //   wait N               N idle ticks

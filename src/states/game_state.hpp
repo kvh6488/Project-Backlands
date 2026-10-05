@@ -7,6 +7,13 @@
 // Forward declaration if we ever need the Application to be passed down
 class Application;
 
+// A dev-only start tile (the --headless `spawn` line), so a scenario can begin
+// where the thing under test is instead of scripting a walk there. Passed as
+// a nullable pointer; null = the world's own spawn.
+struct SpawnOverride {
+  int x, y;
+};
+
 // ============================================================================
 // GameState — one screen's worth of game logic
 // ============================================================================
