@@ -148,12 +148,17 @@ float Overworld::heightAt(int x, int y) const {
   return c.height[(y % kChunk) * kChunk + (x % kChunk)];
 }
 
-PropType Overworld::propAt(int x, int y) const {
+const Prop *Overworld::findProp(int x, int y) const {
   x = wrapX(x);
   y = wrapY(y);
   const Chunk &c = chunk(x / kChunk, y / kChunk);
   int i = c.propIndex[(y % kChunk) * kChunk + (x % kChunk)];
-  return i < 0 ? PropType::NONE : c.props[i].type;
+  return i < 0 ? nullptr : &c.props[i];
+}
+
+PropType Overworld::propAt(int x, int y) const {
+  const Prop *p = findProp(x, y);
+  return p ? p->type : PropType::NONE;
 }
 
 const std::vector<Prop> &Overworld::chunkProps(int cx, int cy) const {

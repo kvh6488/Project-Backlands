@@ -7,6 +7,7 @@
 #include "imgui.h"
 #include "rlImGui.h"
 #include "states/maze_state.hpp"
+#include "states/overworld_state.hpp"
 
 
 Application::Application(const AppConfig &config)
@@ -66,8 +67,15 @@ Application::Application(const AppConfig &config)
   CraftingSystem::init();
 
   // 3. Set Initial State
-  m_currentState = std::make_unique<MazeState>(
-      m_run, m_uiManager, m_debugOverlay, m_capture, config.blitScale);
+  if (config.startWorld == StartWorld::OVERWORLD) {
+    OverworldState::SpawnOverride spawn{config.spawnX, config.spawnY};
+    m_currentState = std::make_unique<OverworldState>(
+        m_run, m_uiManager, m_debugOverlay, m_capture, config.blitScale,
+        config.hasSpawnOverride ? &spawn : nullptr);
+  } else {
+    m_currentState = std::make_unique<MazeState>(
+        m_run, m_uiManager, m_debugOverlay, m_capture, config.blitScale);
+  }
   m_currentState->onEnter();
 }
 

@@ -1,0 +1,19 @@
+# A walk on the surface from the island's own spawn. Seed 1's spawn is
+# grassland in the middle band; the walk heads east into the nearby woods,
+# so the props in nearbyProps change and trees start blocking.
+seed 1
+world overworld
+window 1280 720
+scale 1.5
+
+checkpoint spawn            # biome GRASSLAND, props kept 2 tiles clear
+
+hold D 180                  # ~12 tiles east
+checkpoint east
+
+hold S 180                  # ~12 tiles south
+checkpoint south
+
+hold A 360                  # ~24 tiles west, past the spawn column
+checkpoint west
+end

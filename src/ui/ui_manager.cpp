@@ -387,6 +387,44 @@ void UIManager::handleInventoryInput(Player &player, World &world,
   }
 }
 
+void UIManager::handleSlotNavigation(const InputState &in) {
+  if (m_inventoryOpen) {
+    // The bag is a HOTBAR_SLOTS-wide grid: row 0 is the hotbar, the rows below
+    // are the bag proper. Up/down wraps between the hotbar and the BOTTOM row
+    // only - stepping down out of the hotbar into row 1 is deliberately a
+    // no-op, so the wrap is one unambiguous move rather than two directions
+    // that both leave the hotbar.
+    constexpr int kCols = HOTBAR_SLOTS;
+    constexpr int kLastRowStart = INVENTORY_SLOTS - kCols;
+
+    int hotbar = m_activeHotbarSlot;
+    if (in.navRight && (hotbar % kCols != kCols - 1))
+      hotbar++;
+    if (in.navLeft && (hotbar % kCols != 0))
+      hotbar--;
+    if (in.navDown) {
+      if (hotbar >= kCols && hotbar < kLastRowStart)
+        hotbar += kCols;
+      else if (hotbar >= kLastRowStart)
+        hotbar -= kLastRowStart;
+    }
+    if (in.navUp) {
+      if (hotbar >= 2 * kCols)
+        hotbar -= kCols;
+      else if (hotbar < kCols)
+        hotbar += kLastRowStart;
+    }
+    m_activeHotbarSlot = hotbar;
+  } else {
+    static_assert(InputState::kHotbarKeys == HOTBAR_SLOTS,
+                  "one number key per hotbar slot");
+    for (int i = 0; i < HOTBAR_SLOTS; ++i) {
+      if (in.hotbar[i])
+        m_activeHotbarSlot = i;
+    }
+  }
+}
+
 // ============================================================================
 // applySlotClick - pick up, put down, merge or swap
 // ============================================================================

@@ -1,0 +1,17 @@
+# Crossing the wrap seam. The world is 3072 tiles across and the seam lies
+# in open ocean, so this starts 3 tiles short of the east edge (the `spawn`
+# line, a dev-only start tile) and walks east over it. Water does not block
+# yet, so the walk is uninterrupted.
+#   before_seam  cell ~(3069,1536), wrapped the same
+#   after_seam   raw cell ~(3075,1536), wrapped ~(3,1536): same ocean,
+#                camera still centred, no gap or jump in scene.png
+seed 1
+world overworld
+spawn 3069 1536
+window 1280 720
+scale 1.5
+
+checkpoint before_seam
+hold D 90                   # ~6 tiles east
+checkpoint after_seam
+end

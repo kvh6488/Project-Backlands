@@ -14,6 +14,10 @@
 // the game gets a real release build, wrap the DebugOverlay in a compile-time
 // flag as well so the panel is absent rather than merely hidden.
 //
+// --world overworld starts the run on the surface. A dev flag until Phase 6
+// gives the game a way up and down; --world maze (the default) is accepted
+// for symmetry.
+//
 // Header-only so no CMakeLists.txt source-list edits are needed.
 // ============================================================================
 
@@ -26,6 +30,15 @@ inline bool enabledFromArgs(int argc, char **argv) {
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--dev") == 0) {
       return true;
+    }
+  }
+  return false;
+}
+
+inline bool overworldFromArgs(int argc, char **argv) {
+  for (int i = 1; i < argc - 1; ++i) {
+    if (std::strcmp(argv[i], "--world") == 0) {
+      return std::strcmp(argv[i + 1], "overworld") == 0;
     }
   }
   return false;

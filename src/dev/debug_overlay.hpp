@@ -4,6 +4,7 @@
 #include "entities/player.hpp"
 #include "raylib.h"
 #include "world/maze.hpp"
+#include "world/overworld.hpp"
 #include <string>
 
 // ============================================================================
@@ -47,10 +48,17 @@ public:
   // to call inside BeginDrawing but not inside a BeginTextureMode block.
   void render(Player &player, Maze &maze, RenderSettings &settings,
               float scale);
+  // The surface's panel: island stats, the whole-island map, and the
+  // regenerate / remove-prop requests. Shares the View section.
+  void render(Player &player, Overworld &world, RenderSettings &settings,
+              float scale);
 
   // The minimap caches the whole maze as a texture. Anything that changes
   // layout must mark it dirty.
   void markMapDirty() { m_mapDirty = true; }
+  // The island map caches one pixel per coarse cell; a new island or a
+  // changed prop marks it dirty.
+  void markIslandMapDirty() { m_islandMapDirty = true; }
 
   // --- Request flags (polled and cleared by MazeState) ---
   // The overlay never touches the world; it only raises requests, matching the
@@ -65,6 +73,12 @@ public:
   void clearForceTrip() { m_triggerForceTrip = false; }
   bool triggerEndTrip() const { return m_triggerEndTrip; }
   void clearEndTrip() { m_triggerEndTrip = false; }
+
+  // Polled and cleared by OverworldState.
+  bool triggerNewIsland() const { return m_triggerNewIsland; }
+  void clearNewIsland() { m_triggerNewIsland = false; }
+  bool triggerRemoveProp() const { return m_triggerRemoveProp; }
+  void clearRemoveProp() { m_triggerRemoveProp = false; }
 
   // --- Magic book inspection ---
   // Pinning suppresses the trip-decay despawn so the book stays put for as
@@ -93,9 +107,16 @@ private:
   void drawTripSection(Player &player);
   void drawMagicBookSection(Maze &maze);
   void drawMinimapSection(Player &player, Maze &maze);
+  void drawIslandSection(Player &player, Overworld &world);
+  void drawIslandMapSection(Player &player, Overworld &world);
+
+  // Opens the panel window around `body`; shared by both render overloads.
+  template <typename Body> void panel(float scale, Body body);
 
   // Redraws the cached god-view minimap, one pixel per cell.
   void generateMap(Maze &maze, const RenderSettings &settings);
+  // One pixel per coarse cell, sampled at its centre tile.
+  void generateIslandMap(const Overworld &world);
 
   // Scoped ImGui theme, so the panel's look does not bleed into any other
   // ImGui window added later.
@@ -115,6 +136,13 @@ private:
   bool m_triggerMagicBookSpawn = false;
   bool m_triggerForceTrip = false;
   bool m_triggerEndTrip = false;
+  bool m_triggerNewIsland = false;
+  bool m_triggerRemoveProp = false;
+
+  // Island map cache
+  Texture2D m_islandTexture{};
+  bool m_islandMapDirty = true;
+  int m_islandView = 0; // 0 = biomes, 1 = height
 
   // Magic book inspection state
   bool m_pinMagicBook = false;

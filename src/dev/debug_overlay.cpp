@@ -1,7 +1,10 @@
 #include "dev/debug_overlay.hpp"
+#include "core/palette.hpp"
 #include "imgui.h"
 #include "items/item.hpp"
+#include "render/overworld_renderer.hpp"
 #include "rlImGui.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -39,6 +42,9 @@ DebugOverlay::DebugOverlay(bool devToolsAvailable)
 DebugOverlay::~DebugOverlay() {
   if (m_mapTexture.id != 0) {
     UnloadRenderTexture(m_mapTexture);
+  }
+  if (m_islandTexture.id != 0) {
+    UnloadTexture(m_islandTexture);
   }
 }
 
@@ -107,6 +113,34 @@ void DebugOverlay::render(Player &player, Maze &maze, RenderSettings &settings,
     m_mapDirty = false;
   }
 
+  panel(scale, [&]() {
+    drawWorldSection(maze);
+    drawViewSection(settings);
+    drawLightingSection(settings);
+    drawGenerationSection(settings);
+    drawTripSection(player);
+    drawMagicBookSection(maze);
+    drawMinimapSection(player, maze);
+  });
+}
+
+void DebugOverlay::render(Player &player, Overworld &world,
+                          RenderSettings &settings, float scale) {
+  if (!m_visible) {
+    return;
+  }
+  if (m_islandTexture.id == 0 || m_islandMapDirty) {
+    generateIslandMap(world);
+    m_islandMapDirty = false;
+  }
+  panel(scale, [&]() {
+    drawIslandSection(player, world);
+    drawViewSection(settings);
+    drawIslandMapSection(player, world);
+  });
+}
+
+template <typename Body> void DebugOverlay::panel(float scale, Body body) {
   rlImGuiBegin();
   ImGui::GetIO().FontGlobalScale = scale;
   pushTheme();
@@ -125,14 +159,7 @@ void DebugOverlay::render(Player &player, Maze &maze, RenderSettings &settings,
     ImGui::SameLine();
     ImGui::TextDisabled("|  seed %u", m_seed);
     ImGui::Separator();
-
-    drawWorldSection(maze);
-    drawViewSection(settings);
-    drawLightingSection(settings);
-    drawGenerationSection(settings);
-    drawTripSection(player);
-    drawMagicBookSection(maze);
-    drawMinimapSection(player, maze);
+    body();
   }
   ImGui::End();
 
@@ -342,6 +369,119 @@ void DebugOverlay::drawMinimapSection(Player &player, Maze &maze) {
 
   ImGui::Unindent();
   ImGui::Spacing();
+}
+
+// ----------------------------------------------------------------------------
+// Overworld sections
+// ----------------------------------------------------------------------------
+void DebugOverlay::drawIslandSection(Player &player, Overworld &world) {
+  if (!ImGui::CollapsingHeader("Island", ImGuiTreeNodeFlags_DefaultOpen)) {
+    return;
+  }
+  ImGui::Indent();
+
+  const IslandMap &map = world.island().map();
+  int lone = 0;
+  for (int inflow : map.lakeInflow)
+    lone += inflow == 0;
+  int riverCells = 0;
+  for (uint8_t r : map.river)
+    riverCells += r;
+  statRow("World", "%d x %d tiles", world.getWidth(), world.getHeight());
+  statRow("Lakes", "%zu  (%d lone)", map.lakeLevel.size(), lone);
+  statRow("River cells", "%d", riverCells);
+  statRow("Spawn", "(%d, %d)", world.spawnX(), world.spawnY());
+  statRow("Cached chunks", "%d", world.cachedChunkCount());
+  statRow("Changes", "%d", world.changeCount());
+
+  int px = world.toGridX(player.getPosition().x);
+  int py = world.toGridY(player.getPosition().y);
+  statRow("Player tile", "(%d, %d)", world.wrapX(px), world.wrapY(py));
+  statRow("Biome", "%s", biomeId(world.biomeAt(px, py)));
+  statRow("Height", "%.3f", world.heightAt(px, py));
+
+  ImGui::Spacing();
+  char cmd[96];
+  snprintf(cmd, sizeof(cmd), "Backrooms.exe --dev --world overworld --seed %u",
+           m_seed);
+  ImGui::TextDisabled("Reproduce this island:");
+  ImGui::TextWrapped("%s", cmd);
+  if (wideButton("Copy launch command")) {
+    ImGui::SetClipboardText(cmd);
+  }
+  // Both go through OverworldState's own entry points.
+  if (wideButton("New seed -> regenerate")) {
+    m_triggerNewIsland = true;
+  }
+  if (wideButton("Remove nearest prop")) {
+    m_triggerRemoveProp = true;
+  }
+
+  ImGui::Unindent();
+  ImGui::Spacing();
+}
+
+void DebugOverlay::drawIslandMapSection(Player &player, Overworld &world) {
+  if (!ImGui::CollapsingHeader("Island map", ImGuiTreeNodeFlags_DefaultOpen)) {
+    return;
+  }
+  ImGui::Indent();
+
+  bool changed = ImGui::RadioButton("Biomes", &m_islandView, 0);
+  ImGui::SameLine();
+  changed |= ImGui::RadioButton("Height", &m_islandView, 1);
+  if (changed) {
+    m_islandMapDirty = true;
+  }
+
+  float side = ImGui::GetContentRegionAvail().x;
+  ImVec2 mapPos = ImGui::GetCursorScreenPos();
+  rlImGuiImageRect(&m_islandTexture, (int)side, (int)side,
+                   Rectangle{0, 0, (float)m_islandTexture.width,
+                             (float)m_islandTexture.height});
+
+  int px = world.wrapX(world.toGridX(player.getPosition().x));
+  int py = world.wrapY(world.toGridY(player.getPosition().y));
+  ImVec2 marker(mapPos.x + (float)px / world.getWidth() * side,
+                mapPos.y + (float)py / world.getHeight() * side);
+  ImDrawList *draw = ImGui::GetWindowDrawList();
+  draw->AddRect(mapPos, ImVec2(mapPos.x + side, mapPos.y + side),
+                IM_COL32(70, 70, 82, 255));
+  draw->AddCircleFilled(marker, 3.5f, IM_COL32(255, 60, 60, 255));
+  draw->AddCircle(marker, 6.0f, IM_COL32(255, 60, 60, 120));
+
+  ImGui::TextDisabled("one pixel = 8x8 tiles; red is you");
+
+  ImGui::Unindent();
+  ImGui::Spacing();
+}
+
+// Built on the CPU and uploaded once: ~150k pixels as DrawPixel calls into a
+// render texture would be ~150k draw calls.
+void DebugOverlay::generateIslandMap(const Overworld &world) {
+  const Island &island = world.island();
+  const int n = island.map().n;
+  const int k = IslandConfig::kCoarse;
+  Image img = GenImageColor(n, n, BLANK);
+  for (int y = 0; y < n; ++y) {
+    for (int x = 0; x < n; ++x) {
+      TileSample s = island.sample(x * k + k / 2, y * k + k / 2);
+      Color c;
+      if (m_islandView == 0) {
+        c = OverworldRenderer::biomeColour(s.biome);
+      } else if (s.height < 0.0f) {
+        c = pal::blue[std::clamp(2 + (int)(s.height * 8.0f), 0, 2)];
+      } else {
+        c = pal::neutral[std::clamp(1 + (int)(s.height * 7.0f), 1, 7)];
+      }
+      ImageDrawPixel(&img, x, y, c);
+    }
+  }
+  if (m_islandTexture.id != 0) {
+    UnloadTexture(m_islandTexture);
+  }
+  m_islandTexture = LoadTextureFromImage(img);
+  UnloadImage(img);
 }
 
 // ----------------------------------------------------------------------------

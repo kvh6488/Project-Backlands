@@ -9,6 +9,10 @@
 #include "states/run.hpp"
 #include <memory>
 
+// Which world the run starts in. Until Phase 6 connects them, the surface is
+// reachable only by asking for it (--world overworld).
+enum class StartWorld { MAZE, OVERWORLD };
+
 // Everything main() decides before the window exists. Defaults are the
 // shipping game; the headless harness (dev/headless_mode.hpp) fills in the
 // rest. The two pointers are non-owning: main keeps the objects alive for
@@ -19,6 +23,11 @@ struct AppConfig {
   const char *seedNote = nullptr;
   // Arms the debug overlay; without it F1 does nothing. See dev/dev_mode.hpp.
   bool devMode = false;
+  StartWorld startWorld = StartWorld::MAZE;
+  // Overworld only: start on this tile instead of the island's spawn. Set by
+  // a scenario's `spawn` line, never by the shipping game.
+  bool hasSpawnOverride = false;
+  int spawnX = 0, spawnY = 0;
 
   // Hidden window, no frame pacing, no ImGui. Ticks run flat out.
   bool headless = false;

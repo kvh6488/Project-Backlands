@@ -9,6 +9,8 @@
 // skipped, keywords and key names are case-insensitive.
 //
 //   seed 1788480606      pin the world  (else --seed, else the clock)
+//   world overworld      start world: maze (default) or overworld
+//   spawn 3060 1536      overworld only: start on this tile, not the spawn
 //   window 1280 720      pin the window (default 1280x720)
 //   scale 1.5            blit scale: one of 1 1.5 2 3 (default 1.5)
 //   wait N               N idle ticks
@@ -55,6 +57,9 @@ struct Command {
 
 struct Scenario {
   unsigned int seed = 0; // 0 = not pinned
+  std::string world;     // "MAZE", "OVERWORLD", or empty = not pinned
+  bool hasSpawn = false;
+  int spawnX = 0, spawnY = 0;
   int windowW = 1280;
   int windowH = 720;
   float blitScale = RenderSettings{}.blitScale;
@@ -140,6 +145,20 @@ inline bool parseText(const std::string &text, Scenario &out,
       if (end == tok[1].c_str() || *end != '\0' || v == 0)
         return fail("seed must be a positive integer");
       out.seed = (unsigned int)v;
+      continue;
+    }
+    if (op == "WORLD") {
+      std::string w = argc(1) ? upper(tok[1]) : "";
+      if (w != "MAZE" && w != "OVERWORLD")
+        return fail("world takes maze or overworld");
+      out.world = w;
+      continue;
+    }
+    if (op == "SPAWN") {
+      if (!argc(2) || !parseInt(tok[1], out.spawnX) ||
+          !parseInt(tok[2], out.spawnY))
+        return fail("spawn takes a tile x and y");
+      out.hasSpawn = true;
       continue;
     }
     if (op == "WINDOW") {

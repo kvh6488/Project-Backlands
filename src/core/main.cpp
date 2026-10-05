@@ -19,6 +19,9 @@ int main(int argc, char **argv) {
   // Without --dev the debug overlay is unreachable, so the game plays exactly
   // as a player would meet it. See dev/dev_mode.hpp.
   cfg.devMode = devmode::enabledFromArgs(argc, argv);
+  if (devmode::overworldFromArgs(argc, argv)) {
+    cfg.startWorld = StartWorld::OVERWORLD;
+  }
 
   headless::Options hl = headless::parseArgs(argc, argv);
   if (!hl.error.empty()) {
@@ -42,6 +45,14 @@ int main(int argc, char **argv) {
     cfg.seed = sc.seed;
     cfg.seedNote = "pinned by the scenario";
   }
+  if (sc.world == "OVERWORLD") {
+    cfg.startWorld = StartWorld::OVERWORLD;
+  } else if (sc.world == "MAZE") {
+    cfg.startWorld = StartWorld::MAZE;
+  }
+  cfg.hasSpawnOverride = sc.hasSpawn;
+  cfg.spawnX = sc.spawnX;
+  cfg.spawnY = sc.spawnY;
   cfg.headless = true;
   cfg.windowW = sc.windowW;
   cfg.windowH = sc.windowH;

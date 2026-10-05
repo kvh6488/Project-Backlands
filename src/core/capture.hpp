@@ -33,6 +33,10 @@ struct Telemetry {
     std::string type;
   };
 
+  // Which state filled this in: "maze" or "overworld". The harness writes the
+  // matching world section and skips the other.
+  std::string world = "maze";
+
   // --- player ---
   Vector2 playerWorldPos = {0.0f, 0.0f};
   int playerCellX = 0, playerCellY = 0;
@@ -59,6 +63,17 @@ struct Telemetry {
   int mazeWidth = 0, mazeHeight = 0;
   int nonWallCount = 0, corridorCount = 0;
   int regenCount = 0;
+
+  // --- overworld ---
+  int worldSize = 0;                      // tiles across (square)
+  int wrappedCellX = 0, wrappedCellY = 0; // player cell folded onto the torus
+  int chunkX = 0, chunkY = 0;             // chunk holding that cell
+  float height = 0.0f;                    // terrain height there (sea = 0)
+  std::string biome;
+  std::vector<WorldItem> nearbyProps;     // props within kPropRadius tiles
+  int cachedChunks = 0;
+  int spawnX = 0, spawnY = 0;
+  static constexpr int kPropRadius = 5;
 };
 
 class CaptureSink {

@@ -86,6 +86,10 @@ public:
   // book's map are maze furniture: they only appear when world.asMaze().
   void handleInventoryInput(Player &player, World &world, const InputState &in);
 
+  // Keyboard slot selection: arrows walk the open bag, number keys pick a
+  // hotbar slot while it is shut. Input phase, like handleInventoryInput.
+  void handleSlotNavigation(const InputState &in);
+
   // Renders the shipping UI: popups, inventory, cupboards and map overlays.
   // The debug panel is DebugOverlay's job and draws after this.
   // `in` is read only for the mouse position (hover highlights, tooltips);

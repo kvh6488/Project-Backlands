@@ -9,6 +9,7 @@
 #include "items/item_database.hpp"
 #include "render/view_bounds.hpp"
 #include "states/maze_state.hpp"
+#include "states/overworld_state.hpp"
 #include "ui/ui_manager.hpp"
 #include <gtest/gtest.h>
 
@@ -72,6 +73,18 @@ TEST(ScenarioTest, DefaultsWhenHeaderAbsent) {
   EXPECT_EQ(sc.windowW, 1280);
   EXPECT_EQ(sc.windowH, 720);
   EXPECT_FLOAT_EQ(sc.blitScale, RenderSettings{}.blitScale);
+}
+
+TEST(ScenarioTest, WorldAndSpawnLines) {
+  scenario::Scenario sc = parseOk("world Overworld\nspawn 3069 1536\n");
+  EXPECT_EQ(sc.world, "OVERWORLD");
+  EXPECT_TRUE(sc.hasSpawn);
+  EXPECT_EQ(sc.spawnX, 3069);
+  EXPECT_EQ(sc.spawnY, 1536);
+  EXPECT_TRUE(parseOk("wait 1\n").world.empty());
+  EXPECT_FALSE(parseOk("wait 1\n").hasSpawn);
+  EXPECT_NE(parseFail("world sky\n").find("line 1"), std::string::npos);
+  parseFail("spawn 3\n");
 }
 
 TEST(ScenarioTest, RejectsBadInput) {
@@ -257,6 +270,35 @@ TEST(TelemetryTest, SnapshotAgreesWithTheWorld) {
     EXPECT_EQ(itemTypeId(maze.getItem(w.x, w.y)), w.type);
     EXPECT_TRUE(isCellRenderable(maze, w.x, w.y, AreaState::ROOM));
   }
+}
+
+TEST(TelemetryTest, OverworldSnapshotAgreesWithTheIsland) {
+  ItemDatabase::init();
+  CraftingSystem::init();
+  UIManager ui(1280, 720);
+  DebugOverlay overlay(false);
+  ::Run run(1u); // qualified: gtest's Test::Run() shadows it
+  OverworldState state(run, ui, overlay);
+  state.placePlayer();
+
+  Telemetry t;
+  state.snapshot(t);
+  const Overworld &w = state.getWorld();
+  EXPECT_EQ(t.world, "overworld");
+  EXPECT_EQ(t.areaState, "SURFACE");
+  EXPECT_EQ(t.playerCellX, w.spawnX());
+  EXPECT_EQ(t.playerCellY, w.spawnY());
+  EXPECT_EQ(t.wrappedCellX, w.spawnX());
+  EXPECT_EQ(t.chunkX, w.spawnX() / Overworld::kChunk);
+  EXPECT_EQ(t.biome, "GRASSLAND");
+  EXPECT_FLOAT_EQ(t.height, w.heightAt(w.spawnX(), w.spawnY()));
+  EXPECT_EQ(t.worldSize, w.getWidth());
+  for (const Telemetry::WorldItem &p : t.nearbyProps) {
+    EXPECT_STREQ(propId(w.propAt(p.x, p.y)), p.type.c_str());
+    EXPECT_LE(std::abs(p.x - t.playerCellX), Telemetry::kPropRadius);
+  }
+  // The state moved the Run's own player rather than a copy.
+  EXPECT_EQ(run.player.getPosition().x, t.playerWorldPos.x);
 }
 
 TEST(TelemetryTest, ItemTypeIdsAreStable) {

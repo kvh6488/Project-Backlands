@@ -89,6 +89,7 @@ public:
     j.field("tick", tick);
     j.field("checkpoint", *m_checkpoint);
     j.field("seed", m_seed);
+    j.field("world", t.world);
 
     j.key("player");
     j.beginObject();
@@ -157,14 +158,52 @@ public:
     }
     j.endArray();
 
-    j.key("maze");
-    j.beginObject();
-    j.field("width", t.mazeWidth);
-    j.field("height", t.mazeHeight);
-    j.field("nonWallCount", t.nonWallCount);
-    j.field("corridorCount", t.corridorCount);
-    j.field("regenCount", t.regenCount);
-    j.endObject();
+    if (t.world == "overworld") {
+      j.key("overworld");
+      j.beginObject();
+      j.field("size", t.worldSize);
+      j.key("cell");
+      j.beginArray(true);
+      j.value(t.wrappedCellX);
+      j.value(t.wrappedCellY);
+      j.endArray();
+      j.key("chunk");
+      j.beginArray(true);
+      j.value(t.chunkX);
+      j.value(t.chunkY);
+      j.endArray();
+      j.field("height", t.height);
+      j.field("biome", t.biome);
+      j.key("spawn");
+      j.beginArray(true);
+      j.value(t.spawnX);
+      j.value(t.spawnY);
+      j.endArray();
+      j.field("cachedChunks", t.cachedChunks);
+      j.key("nearbyProps");
+      j.beginArray();
+      for (const Telemetry::WorldItem &p : t.nearbyProps) {
+        j.beginObject();
+        j.key("cell");
+        j.beginArray(true);
+        j.value(p.x);
+        j.value(p.y);
+        j.endArray();
+        j.field("type", p.type);
+        j.endObject();
+      }
+      j.endArray();
+      j.endObject();
+    } else {
+      j.key("maze");
+      j.beginObject();
+      j.field("width", t.mazeWidth);
+      j.field("height", t.mazeHeight);
+      j.field("nonWallCount", t.nonWallCount);
+      j.field("corridorCount", t.corridorCount);
+      j.field("regenCount", t.regenCount);
+      j.endObject();
+    }
 
     j.field("frameCaptured", m_frameReadable);
     j.endObject();

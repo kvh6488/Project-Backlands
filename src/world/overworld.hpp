@@ -78,6 +78,9 @@ public:
   Biome biomeAt(int x, int y) const;
   float heightAt(int x, int y) const;
   PropType propAt(int x, int y) const;
+  // The full record of the prop on a tile, or null. Valid until its chunk is
+  // evicted by retainAround - read it, do not keep it.
+  const Prop *findProp(int x, int y) const;
   // The props of one chunk, after the change record. cx, cy wrap. The
   // reference lives until the chunk is evicted by retainAround.
   const std::vector<Prop> &chunkProps(int cx, int cy) const;

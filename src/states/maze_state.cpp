@@ -368,42 +368,7 @@ void MazeState::handleInput(const InputState &in) {
   // in the input phase, so that render() can stay read-only - the UI used to
   // resolve clicks mid-draw.
   m_uiManager.handleInventoryInput(m_player, m_maze, in);
-
-  if (m_uiManager.isInventoryOpen()) {
-    // The bag is a HOTBAR_SLOTS-wide grid: row 0 is the hotbar, the rows below
-    // are the bag proper. Up/down wraps between the hotbar and the BOTTOM row
-    // only - stepping down out of the hotbar into row 1 is deliberately a
-    // no-op, so the wrap is one unambiguous move rather than two directions
-    // that both leave the hotbar.
-    constexpr int kCols = HOTBAR_SLOTS;
-    constexpr int kLastRowStart = INVENTORY_SLOTS - kCols;
-
-    int hotbar = m_uiManager.getActiveHotbarSlot();
-    if (in.navRight && (hotbar % kCols != kCols - 1))
-      hotbar++;
-    if (in.navLeft && (hotbar % kCols != 0))
-      hotbar--;
-    if (in.navDown) {
-      if (hotbar >= kCols && hotbar < kLastRowStart)
-        hotbar += kCols;
-      else if (hotbar >= kLastRowStart)
-        hotbar -= kLastRowStart;
-    }
-    if (in.navUp) {
-      if (hotbar >= 2 * kCols)
-        hotbar -= kCols;
-      else if (hotbar < kCols)
-        hotbar += kLastRowStart;
-    }
-    m_uiManager.setActiveHotbarSlot(hotbar);
-  } else {
-    static_assert(InputState::kHotbarKeys == HOTBAR_SLOTS,
-                  "one number key per hotbar slot");
-    for (int i = 0; i < HOTBAR_SLOTS; ++i) {
-      if (in.hotbar[i])
-        m_uiManager.setActiveHotbarSlot(i);
-    }
-  }
+  m_uiManager.handleSlotNavigation(in);
 
   if (in.use) {
     if (m_uiManager.isFullscreenMapOpen()) {

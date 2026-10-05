@@ -27,4 +27,23 @@ inline constexpr Color mapZone = pal::accent[3];        // shifting-zone cells o
 inline constexpr Color mapPlayer = pal::accent[4];      // lavender dot, ringed in ground
 inline constexpr Color radiationGlow = pal::accent[5];  // barrel halos, additive
 
+// Overworld flat fills: the surface draws these until its tile sheets land,
+// and the island minimap keeps using them afterwards.
+inline constexpr Color ocean = pal::blue[0];
+inline constexpr Color lake = pal::blue[2];
+inline constexpr Color river = pal::blue[3];
+inline constexpr Color beach = pal::yellow[9];
+inline constexpr Color grassland = pal::green[5];
+inline constexpr Color forest = pal::green[3];
+inline constexpr Color wetland = pal::green[2];
+inline constexpr Color mountain = pal::grey[3];
+inline constexpr Color snow = pal::grey[7];
+// Placeholder prop shapes.
+inline constexpr Color trunk = pal::brown[2];
+inline constexpr Color canopy = pal::green[2];
+inline constexpr Color pine = pal::green[1];
+inline constexpr Color bush = pal::green[4];
+inline constexpr Color rock = pal::grey[4];
+inline constexpr Color reeds = pal::yellow[6];
+
 }  // namespace theme
