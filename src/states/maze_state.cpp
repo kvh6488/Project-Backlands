@@ -543,12 +543,18 @@ void MazeState::render(const InputState &in) {
   m_drawQueue.flush();
   EndMode2D();
 
-  // The flicker goes UNDER the torch mask. The mask multiplies, so whatever
-  // it blacks out stays black; drawn on top, the flicker's near-black (not
-  // pure black) lifted the dark outside the cone into a grey wash.
+  // The flicker darkens by MULTIPLYING the scene by (1 - alpha), under the
+  // torch mask. An alpha-blended rectangle also lowered the canvas's own
+  // alpha (a^2 + (1 - a), ~0.75 mid-pulse), so the blit let the window's
+  // clear colour show through and the dark flashed grey. An opaque multiply
+  // leaves canvas alpha at 1 and keeps black black.
   if (m_radiationDarknessAlpha > 0.0f) {
+    unsigned char keep =
+        (unsigned char)std::lround(255.0f * (1.0f - m_radiationDarknessAlpha));
+    BeginBlendMode(BLEND_MULTIPLIED);
     DrawRectangle(0, 0, m_canvas.width, m_canvas.height,
-                  Fade(theme::ground, m_radiationDarknessAlpha));
+                  Color{keep, keep, keep, 255});
+    EndBlendMode();
   }
 
   if (m_renderSettings.flashlightEnabled &&
