@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Project Backrooms is a 2D top-down psychological horror maze game with a custom C++20 engine on Raylib 5.0 + Dear ImGui (via rlImGui). Single-player, no networking, no scripting layer — everything is C++ compiled into one executable.
 
-Design intent lives in `docs/`: [roadmap.md](docs/roadmap.md) is the authoritative phased plan (Phases 0–3 built the maze; Phase 4 — overworld island generation — is next) and [the_wilderness_update.md](docs/the_wilderness_update.md) is the design reference for the two-world game (overworld survival hub + maze). The roadmap says what gets built when; the wilderness doc says why. Read both before adding a gameplay system — most features are already specced there.
+Design intent lives in `docs/`: [roadmap.md](docs/roadmap.md) is the authoritative phased plan (Phases 0–3 built the maze; Phase 4 — overworld island generation — is in progress: code complete, surface art pending) and [the_wilderness_update.md](docs/the_wilderness_update.md) is the design reference for the two-world game (overworld survival hub + maze). The roadmap says what gets built when; the wilderness doc says why. Read both before adding a gameplay system — most features are already specced there.
 
 ## Build & Test
 
@@ -75,9 +75,10 @@ src/
   dev/        Developer tooling - the ImGui panel, seed table, console logger.
               Dropped wholesale from a release build.
   ui/         UIManager - the shipping HUD, inventory and map overlays.
-  render/     All presentation: the three renderers plus the shared
+  render/     All presentation: the renderers, the DrawQueue and the shared
               view_bounds cull. Renderers own their textures; no game state.
-  world/      Maze, ItemSpawner, and world/generators/.
+  world/      World (the shared base), Maze, ItemSpawner, the overworld
+              (noise, terrain_field, island, overworld) and world/generators/.
   entities/   Player today; mobs land here.
   items/      ItemType, ItemDatabase, CraftingSystem - data, no drawing.
   states/     GameState and the concrete states.
@@ -92,11 +93,17 @@ share `view_bounds.hpp` and change together when the draw pipeline changes.
 
 ### Ownership chain
 
-`main.cpp` → `Application` (owns the Raylib window, the `UIManager`, and a `unique_ptr<GameState>`; its `run()` is the frame loop) → `PlayingState` (the only concrete `GameState` today) which owns the `Maze`, `Player`, `Camera2D`, all three renderers, the `ItemSpawner`, the seed and the shared `std::mt19937`.
+`main.cpp` → `Application` (owns the Raylib window, the `Run`, the `UIManager`, and a `unique_ptr<GameState>`; its `run()` is the frame loop) → one of two concrete states: `MazeState` (owns the `Maze`, `Camera2D`, its renderers, the `ItemSpawner` and the shared `std::mt19937`) or `OverworldState` (owns the `Overworld` and its renderers). `--world overworld` picks the second; there is no in-game transition until Phase 6.
+
+**`Run` (`src/states/run.hpp`) owns what outlives either world: the seed and the `Player` (bag included).** States borrow it and hold `Player &m_player`. A state places the player with `Player::teleport` — never `m_player = Player(...)`, which would wipe the bag on every world change. The day counter joins `Run` in Phase 5. Inside a gtest body write `::Run`: gtest's `Test::Run()` shadows the name.
 
 `main.cpp` decides everything that must be known before the window exists and hands it over as one `AppConfig` (seed, dev mode, headless, window size, blit scale, and two non-owning pointers: an `InputSource` and a `CaptureSink`, both null in the shipping game). `Application` borrows those; `main` keeps them alive longer than the `Application`.
 
 `GameState` (`src/states/game_state.hpp`) is the extension point for future states (main menu, death screen). `Application` has no game logic — everything gameplay-side belongs in a state.
+
+### World: the seam between the two worlds
+
+`World` (`src/world/world.hpp`) is the base both `Maze` and `Overworld` derive from. It holds the shared toroidal geometry as plain data (`getWidth`, `wrapX`, `toGridX`… non-virtual, so generator inner loops stay fast) and a narrow virtual contract: `isSolid`, `getItem`/`setItem`/`getItemState`, `findNearestEmptyItemCell`. `Player`, `UIManager`, `ItemRenderer` and `ViewBounds` take `World&`. Anything only one world has is **not** on the interface: maze-only rules (room/corridor seal via `Maze::isSealedFrom`, doors, cupboards, the magic book) run behind `if (Maze *maze = world.asMaze())`, and surface-only data behind `asOverworld()`. Add to the virtual contract only what *both* worlds genuinely answer.
 
 ### Maze: one flat array, toroidal, with parallel layers
 
@@ -112,7 +119,7 @@ Cell types are `CELL_WALL` / `CELL_CORRIDOR` / `CELL_ROOM`, and the corridor/roo
 
 ### Generation pipeline
 
-Run in this order in `PlayingState::onEnter()`, all sharing one seeded `std::mt19937` so a seed fully determines the world:
+Run in this order in `MazeState::onEnter()`, all sharing one seeded `std::mt19937` so a seed fully determines the world:
 
 1. `BSPGenerator` — recursive space partition, carves rooms, merges adjacent ones, returns a middle-room index used as both the Prim's start and the player spawn.
 2. `PrimsGenerator` — grows the corridor web through the space between rooms.
@@ -121,23 +128,23 @@ Run in this order in `PlayingState::onEnter()`, all sharing one seeded `std::mt1
 5. `PrimsGenerator::pruneSmallAlcoves`.
 6. `ItemSpawner::spawnInitialItems`.
 
-Each generator exposes both `generate()` (whole maze) and `generateZone(startX, startY, w, h)` (a rectangle). The zone variants exist for the "Tic-Tac-Toe" shifting-zone regeneration in `PlayingState::regenerateTicTacToeZones()`, which clears eight strips of the maze, re-runs the pipeline inside them, and asks the `ItemSpawner` to replenish exactly what `Maze::clearItemsInZone` reported destroyed. **Those zone rectangles are hardcoded to the 250×150 maze size** set in the `PlayingState` constructor; changing maze dimensions requires updating them.
+Each generator exposes both `generate()` (whole maze) and `generateZone(startX, startY, w, h)` (a rectangle). The zone variants exist for the "Tic-Tac-Toe" shifting-zone regeneration in `MazeState::regenerateTicTacToeZones()`, which clears eight strips of the maze, re-runs the pipeline inside them, and asks the `ItemSpawner` to replenish exactly what `Maze::clearItemsInZone` reported destroyed. **Those zone rectangles are hardcoded to the 250×150 maze size** set in the `MazeState` constructor; changing maze dimensions requires updating them.
 
 Doorway punching is shared in `GeneratorUtils::punchDoorways` and enforces one door per room (`Maze::isValidDoorPlacement`).
 
 ### Rendering
 
-Data and presentation are strictly separated: `MazeRenderer` (terrain), `PlayerRenderer` (sprite + animation timer), `ItemRenderer` (world items *and* inventory icons). Renderers own their textures; `loadTextures()` is called from `PlayingState::onEnter`.
+Data and presentation are strictly separated: `MazeRenderer` (terrain), `PlayerRenderer` (sprite + animation timer), `ItemRenderer` (world items *and* inventory icons). Renderers own their textures; `loadTextures()` is called from `MazeState::onEnter`.
 
-`PlayingState::render()` has a fixed, order-sensitive pipeline:
+`MazeState::render()` has a fixed, order-sensitive pipeline:
 
 1. `buildLightMask(...)` **before** `BeginTextureMode` — it uses its own render texture.
-2. Scene into `m_screenTarget`: maze → **items behind → player → items in front** (`ItemRenderer::Layer`). Front-facing cupboards stand against the top wall so they go behind the player; everything else draws after, so tall furniture occludes the sprite.
+2. Scene into `m_screenTarget`: maze terrain, then the **Y-sorted `DrawQueue`** (`src/render/draw_queue.hpp`): the player and every visible item are pushed with their base Y (the world-pixel row their feet touch) and drawn back to front by a stable counting sort. The player is pushed first so an exact tie goes to the furniture, as under the old fixed layers. `scenarios/ysort.txt` exercises the cases; on every other maze scenario the output is byte-identical to the layered version. A renderer that draws into the queue implements `Drawer`: it binds its subject in `collect()` and draws one entry in `drawQueued(a, b)`.
 3. `drawLightMask()` (corridors only), then the radiation darkness rectangle, still inside the render texture.
 4. `EndTextureMode`, then blit `m_screenTarget` to the screen, wrapped in `m_tripShader` when `Player::getMushroomEffectStrength() > 0`.
 5. The magic-book overlay and all `UIManager` output draw *after* `EndShaderMode` — they are intentionally exempt from the trip distortion. `DebugOverlay::render` goes last of all, because ImGui must own the final draw of the frame.
 
-**Two pixel spaces — canvas and window.** The scene renders into `m_screenTarget` (the *canvas*) at `camera.zoom = 1.0`, so a 32px cell is exactly 32 texels, and the canvas is then blitted to the window at `RenderSettings::blitScale`. The invariant is an integer **art** pixel, not an integer blit: all art is 16px drawn at 2× onto the canvas, so an art pixel covers `2 × blitScale` window pixels and that product must be whole — hence the allowed set {1, 1.5, 2, 3} (art at 2×/3×/4×/6×; default 1.5, ~27 tiles across a 1280 window) and why the old 1.2 shimmered. Canvas size is `ceil(window / blitScale)` (`Viewport::canvasFor` in `src/core/viewport.hpp`) — a bigger window is a bigger canvas showing more tiles; sprites never resize. Every render call takes a `Viewport` alongside the camera instead of calling `GetScreenWidth()`: the scene passes, `ViewBounds`, and the light mask all work in **canvas** space; `UIManager`, the pass-out fade and the magic-book overlay (drawn after the blit, through a `windowCamera` with `zoom = blitScale`) work in **window** space. Mouse input arrives in window pixels — convert through `PlayingState::windowToCanvas` before `GetScreenToWorld2D`. `GetScreenWidth()` is only ever the window; if you find yourself calling it inside the render texture, you are in the wrong space.
+**Two pixel spaces — canvas and window.** The scene renders into `m_screenTarget` (the *canvas*) at `camera.zoom = 1.0`, so a 32px cell is exactly 32 texels, and the canvas is then blitted to the window at `RenderSettings::blitScale`. The invariant is an integer **art** pixel, not an integer blit: all art is 16px drawn at 2× onto the canvas, so an art pixel covers `2 × blitScale` window pixels and that product must be whole — hence the allowed set {1, 1.5, 2, 3} (art at 2×/3×/4×/6×; default 1.5, ~27 tiles across a 1280 window) and why the old 1.2 shimmered. Canvas size is `ceil(window / blitScale)` (`Viewport::canvasFor` in `src/core/viewport.hpp`) — a bigger window is a bigger canvas showing more tiles; sprites never resize. Every render call takes a `Viewport` alongside the camera instead of calling `GetScreenWidth()`: the scene passes, `ViewBounds`, and the light mask all work in **canvas** space; `UIManager`, the pass-out fade and the magic-book overlay (drawn after the blit, through a `windowCamera` with `zoom = blitScale`) work in **window** space. Mouse input arrives in window pixels — convert through `MazeState::windowToCanvas` before `GetScreenToWorld2D`. `GetScreenWidth()` is only ever the window; if you find yourself calling it inside the render texture, you are in the wrong space.
 
 `m_screenTarget` and `MazeRenderer::m_lightMask` are reallocated whenever the canvas size changes; anything else caching canvas-sized textures needs the same check.
 
@@ -161,13 +168,13 @@ Both need `ItemDatabase::init()` and `CraftingSystem::init()` before use; these 
 
 ### Player ↔ UI communication
 
-`Player` never touches the UI. It sets one-shot boolean flags which `PlayingState` drains each frame via the `pollEventX()` methods (`pollEventMushroomConsumed`, `pollEventMapCrafted`, …) — each poll returns the flag and clears it — and translates them into `UIManager::showPopup(text, PopupType, duration)` calls.
+`Player` never touches the UI. It sets one-shot boolean flags which `MazeState` drains each frame via the `pollEventX()` methods (`pollEventMushroomConsumed`, `pollEventMapCrafted`, …) — each poll returns the flag and clears it — and translates them into `UIManager::showPopup(text, PopupType, duration)` calls.
 
 `UIManager` is a state holder and mailbox, not a caller: it owns inventory/cupboard/map-overlay open state and the popup queue.
 
-Its one write path into the game is `handleInventoryInput(Player&, Maze&)`, called from `PlayingState::handleInput` — the input phase, before any drawing. `UIManager::render` and `renderInventory` are read-only with respect to the `Player` and the `Maze`; they only write hover bookkeeping for the tooltip. Both passes take their geometry from `InventoryLayout::compute`, so a click is hit-tested against exactly the rectangle that gets drawn. Keep that direction: new UI widgets resolve their clicks in `handleInventoryInput` and add their rectangle to `InventoryLayout`, never mid-draw.
+Its one write path into the game is `handleInventoryInput(Player&, World&)` (plus `handleSlotNavigation(in)` for the keyboard), called from `MazeState::handleInput` — the input phase, before any drawing. `UIManager::render` and `renderInventory` are read-only with respect to the `Player` and the `Maze`; they only write hover bookkeeping for the tooltip. Both passes take their geometry from `InventoryLayout::compute`, so a click is hit-tested against exactly the rectangle that gets drawn. Keep that direction: new UI widgets resolve their clicks in `handleInventoryInput` and add their rectangle to `InventoryLayout`, never mid-draw.
 
-`DebugOverlay` (`src/dev/debug_overlay.hpp`) is the development panel, split out of `UIManager` and owned by `Application` so it survives future state switches. It is a *view*: presentation values the game needs regardless (torch on/off, camera zoom, the three light-cone numbers, show-zones) live in `RenderSettings`, which `PlayingState` owns and the overlay edits by reference; only debug-only state (the god-view minimap texture, magic-book and trip forcing, status strings) belongs to the overlay. It uses the same mailbox convention — `PlayingState` reads and clears `triggerTicTacToeRegen`, `triggerMagicBookSpawn`, `triggerForceTrip`, `triggerEndTrip`. Debug buttons must call the same public entry points the real systems will use, so they keep exercising the shipping path.
+`DebugOverlay` (`src/dev/debug_overlay.hpp`) is the development panel, split out of `UIManager` and owned by `Application` so it survives future state switches. It is a *view*: presentation values the game needs regardless (torch on/off, camera zoom, the three light-cone numbers, show-zones) live in `RenderSettings`, which `MazeState` owns and the overlay edits by reference; only debug-only state (the god-view minimap texture, magic-book and trip forcing, status strings) belongs to the overlay. It uses the same mailbox convention — `MazeState` reads and clears `triggerTicTacToeRegen`, `triggerMagicBookSpawn`, `triggerForceTrip`, `triggerEndTrip`. Debug buttons must call the same public entry points the real systems will use, so they keep exercising the shipping path.
 
 Gating is runtime only: `Backrooms.exe --dev` arms the panel (`src/dev/dev_mode.hpp`) and `F1` shows/hides it. The code still ships inside the binary — a release build should drop `BACKROOMS_DEV_SOURCES` from the executable and guard the `dev/` includes, which is why the dev tooling is its own directory and its own CMake list.
 
@@ -175,35 +182,46 @@ Gating is runtime only: `Backrooms.exe --dev` arms the panel (`src/dev/dev_mode.
 
 `Backrooms.exe --headless <scenario>` replaces the keyboard with a text file and the screen with a directory. The game side is two small things in `core/capture.hpp`, and everything else lives in `dev/`:
 
-- **`Telemetry`** is a POD a state fills on request — `GameState::snapshot(Telemetry&)`, the mirror image of `InputState`: a value out, no JSON and no file I/O in `states/`. `PlayingState::snapshot` reports player cell/facing/area, the camera's world rect, the bag, the items the canvas would draw (same `isCellRenderable` rule as `ItemRenderer`), and the maze counts.
-- **`CaptureSink`** is four hooks per tick. `Application::run` brackets the tick with `beginTick` / `endTick(tick, telemetry)`; `PlayingState::render` calls `onSceneReady(m_screenTarget)` **immediately after `EndTextureMode`** and `onFrameReady()` **immediately before `EndDrawing`**. Those two positions are the whole point: the canvas is complete only there, and the back buffer is undefined after the swap — so the frame capture cannot be done from `Application`.
+- **`Telemetry`** is a POD a state fills on request — `GameState::snapshot(Telemetry&)`, the mirror image of `InputState`: a value out, no JSON and no file I/O in `states/`. `MazeState::snapshot` reports player cell/facing/area, the camera's world rect, the bag, the items the canvas would draw (same `isCellRenderable` rule as `ItemRenderer`), and the maze counts.
+- **`CaptureSink`** is four hooks per tick. `Application::run` brackets the tick with `beginTick` / `endTick(tick, telemetry)`; `MazeState::render` calls `onSceneReady(m_screenTarget)` **immediately after `EndTextureMode`** and `onFrameReady()` **immediately before `EndDrawing`**. Those two positions are the whole point: the canvas is complete only there, and the back buffer is undefined after the swap — so the frame capture cannot be done from `Application`.
 
 The `dev/` side: `scenario.hpp` (grammar + parser, documented in its banner), `scripted_input.hpp` (compiles the command list into one `InputState` per tick up front, mirroring `pollHardwareInput`'s held/pressed semantics exactly), `headless_mode.hpp` (CLI), `json_writer.hpp` (emit only — the project deliberately has no JSON parser), and `headless_harness.hpp` (the `CaptureSink` that writes `scene.png`, `frame.png`, `telemetry.json` per checkpoint and `run.json` per run). A `checkpoint` is an idle tick: it records the world after every command before it has settled for one tick, with nothing from the next command leaked in.
 
 Headless still needs a GL context (render texture, trip shader), so the window is created with `FLAG_WINDOW_HIDDEN` rather than not at all; `SetTargetFPS` and `rlImGuiSetup` are skipped. Two things the harness depends on that are easy to break: **`SetRandomSeed(seed)` in the `Application` constructor** (raylib seeds `GetRandomValue` from the clock otherwise, and the radiation flicker uses it), and **`rlDrawRenderBatchActive()` before `LoadImageFromScreen`** (rlgl only flushes its batch at `EndDrawing`, so without it the UI drawn last is missing from `frame.png`). The contract is that one scenario run twice produces byte-identical artifacts; `diff -r` two `--out` directories to check.
 
-Scenarios live in `scenarios/` at the repo root — they are not assets and do not go through the configure-time copy. Named seed fixtures for them are in `dev/debug_seeds.hpp` (`mushroom_room` = seed 3 has a mushroom in pickup range at spawn; `furniture_room` = seed 1 and `barrel_room` = seed 38 put tables, cupboards and a toxic barrel in view for presentation checks — `scenarios/furniture.txt` and `barrel.txt` are single-checkpoint scenarios that exist for their `scene.png`).
+Scenarios live in `scenarios/` at the repo root — they are not assets and do not go through the configure-time copy. Named seed fixtures for them are in `dev/debug_seeds.hpp` (`mushroom_room` = seed 3 has a mushroom in pickup range at spawn; `furniture_room` = seed 1 and `barrel_room` = seed 38 put tables, cupboards and a toxic barrel in view for presentation checks — `scenarios/furniture.txt` and `barrel.txt` are single-checkpoint scenarios that exist for their `scene.png`). `ysort.txt` walks the player in front of and behind furniture. `overworld_walk.txt` and `overworld_wrap.txt` use the `world overworld` header line; the wrap scenario also uses `spawn X Y` (a dev-only start tile) to begin three tiles short of the seam.
 
 Cached render textures (`DebugOverlay::m_mapTexture`, `UIManager::m_magicBookMapTexture`, per-instance drawn maps) are regenerated only when marked dirty. Any code that changes maze layout must call **both** `DebugOverlay::markMapDirty()` and `UIManager::markMagicBookMapDirty()`.
 
+### Overworld: island generation
+
+The surface is a 3072×3072-tile world that wraps like the maze, with a ~2k-tile island centred in it and ≥500 tiles of open ocean to the seam, so no generator has to be seamless across the wrap (`IslandTest.TheWrapSeamLiesInOpenOcean` guards this). Three layers:
+
+- **`TerrainField`** (`world/terrain_field.hpp`) — height, temperature and moisture as **pure functions** of (x, y, seed), built on our own noise (`world/noise.hpp`: hash → gradient noise → fBm / ridged / domain warp). Height is the land score: warped-radial falloff + hills + ridged mountains, with a hard cliff past 0.92 radii. Never stored per tile. `IslandConfig` holds the compile-time shape; generation constants are not live settings.
+- **`IslandMap`** (`world/generators/island_generator.*`) — whole-island passes on a coarse grid (1 cell = 8×8 tiles): ocean flood, priority-flood depression filling, lakes, D8 drainage, flow accumulation, rivers (cells with enough upstream area, so every river ends in a lake or the ocean by construction), Euclidean distance to water. `Island` (`world/island.*`) combines both: `sample(x, y)` classifies any tile in O(1) (ocean → lake → marsh → river → `biome::classifyLand`, a Whittaker lookup in `world/biome.hpp`) and picks the spawn.
+- **`Overworld`** (`world/overworld.*`) — the `World` implementation. Tiles live in 32×32 **chunks** generated on demand and dropped by `retainAround` (memory scales with the view, not the world). Props come from per-chunk Bridson Poisson-disc points (`world/generators/poisson.*`), thinned by a biome density roll; a chunk yields any point within `kPropSpacing` of a higher-priority (lower-index) neighbour's point, so spacing holds across borders whatever the build order. Player changes (a removed prop) live in a sparse **change record** outside the chunks and are re-applied on every rebuild. Water is walkable for now (no swimming/boat until Phase 9).
+
+`OverworldRenderer` draws flat biome fills and placeholder prop shapes (theme roles `theme::ocean`…`theme::reeds`) until the surface sheets are chosen and quantized; props go through the shared `DrawQueue`. The debug panel's overworld view (`DebugOverlay::render(Player&, Overworld&, …)`) shows island stats, a biome/height map, and raises `triggerNewIsland` / `triggerRemoveProp`, which `OverworldState` drains.
+
 ### Input
 
-Input is a value, not a global. `pollHardwareInput()` in `src/core/input_state.hpp` is the **only** place raylib's keyboard/mouse API is called (plus the `F1` dev-panel toggle in `Application::run`, deliberately kept outside the struct). It fills an `InputState` POD — named actions (`pickup`, `door1`, `moveUp`…) split into held and pressed, plus mouse position and buttons — which `Application::run` obtains from an `InputSource` each tick and passes to both `GameState::update(dt, in)` and `render(in)`. Gameplay reads `in.pickup`, never `KEY_P`; a rebinding is one line in `pollHardwareInput`, and a test drives `Player::update` by filling the struct by hand. Movement and door/pickup handling live in `Player::update`; everything else is in `PlayingState::handleInput`.
+Input is a value, not a global. `pollHardwareInput()` in `src/core/input_state.hpp` is the **only** place raylib's keyboard/mouse API is called (plus the `F1` dev-panel toggle in `Application::run`, deliberately kept outside the struct). It fills an `InputState` POD — named actions (`pickup`, `door1`, `moveUp`…) split into held and pressed, plus mouse position and buttons — which `Application::run` obtains from an `InputSource` each tick and passes to both `GameState::update(dt, in)` and `render(in)`. Gameplay reads `in.pickup`, never `KEY_P`; a rebinding is one line in `pollHardwareInput`, and a test drives `Player::update` by filling the struct by hand. Movement and door/pickup handling live in `Player::update`; everything else is in `MazeState::handleInput`.
 
 Time is fixed, not measured: every tick advances the simulation by `Application::kFixedDt` (1/60 s). `SetTargetFPS(60)` paces the loop to real time; nothing reads `GetFrameTime()` or `GetTime()`. `Application::run(RunConfig)` takes `maxTicks` so a harness can bound a run. A click that lands on the debug panel (`ImGui::GetIO().WantCaptureMouse`) is stripped from the `InputState` before the game sees it.
 
 WASD/arrows move · `K`/`L` door 1 / door 2 · `P` pick up · `I` inventory · `O` open focused cupboard · `U` use/consume (or close fullscreen map) · `Q` enter placement mode, then left-click a visible floor tile · `1`–`5` hotbar · `F11` fullscreen · `F1` debug panel (only with `--dev`).
 
-Command line: `--seed <name|number>` pins the world (`src/dev/debug_seeds.hpp`), `--dev` arms the debug panel, `--headless <scenario> [--out <dir>] [--ticks N]` runs a scripted scenario with no window (`src/dev/headless_mode.hpp`; a `seed` line in the scenario overrides `--seed`).
+Command line: `--seed <name|number>` pins the world (`src/dev/debug_seeds.hpp`), `--dev` arms the debug panel, `--world overworld` starts on the surface (`src/dev/dev_mode.hpp`), `--headless <scenario> [--out <dir>] [--ticks N]` runs a scripted scenario with no window (`src/dev/headless_mode.hpp`; a `seed` line in the scenario overrides `--seed`).
 
 ## Tests
 
-Four files, split by subject:
+Five files, split by subject:
 
 - `tests/test_maze.cpp` — maze indexing, toroidal wrapping, generator invariants (rooms carved, connectivity, no diagonal leaks), the derived Tic-Tac-Toe zone layout, `isCellRenderable`, and the `grid.hpp` geometry.
 - `tests/test_inventory.cpp` — pickup/drop/stack/swap rules and crafting, including the full-bag edge cases.
 - `tests/test_magic_book.cpp` — book spawn candidate selection and its search radius.
-- `tests/test_harness.cpp` — the scenario grammar, the tick timeline it compiles to (held vs pressed, checkpoints as idle ticks, mouse persistence), the JSON emitter's exact output, the `--headless` CLI, and `PlayingState::snapshot` against a generated world.
+- `tests/test_harness.cpp` — the scenario grammar, the tick timeline it compiles to (held vs pressed, checkpoints as idle ticks, mouse persistence), the JSON emitter's exact output, the `--headless` CLI, and both states' `snapshot` against a generated world.
+- `tests/test_overworld.cpp` — noise, Poisson spacing, island determinism, spawn rules, river termination, lone lakes, the open-ocean seam, cross-border prop spacing and build-order independence, the change record surviving eviction, wrap continuity, and the player colliding with a tree. The suites share one generated island (`sharedWorld()`) because generation costs ~0.2 s in Debug.
 
 The test target links the whole game including Raylib and ImGui, so tests can construct real game objects, but must not open a window. Anything needing `ItemDatabase` or `CraftingSystem` must call their `init()` itself — only the `Application` constructor does that in the shipping path.
 

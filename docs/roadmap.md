@@ -134,7 +134,9 @@ The mathematical heart — radiation systems spreading across the grid.
   - **Base Crafting System**: Basic crafting system developed
   - **Classic Map**: Crafted with pen and paper. Upgradeable (one time only) to increase its range. *Conflict note: May remain a fullscreen overlay (leaving player vulnerable) OR change to a minimap.*
 
-### Phase 4 — The Overworld: Island Generation
+### Phase 4 (IN PROGRESS) — The Overworld: Island Generation
+**Status (05-10-2026):** 4.1, 4.2, 4.3 and 4.5 are built and tested. 4.4: the Y-sorted queue and the flat placeholder renderer are done; the palette extension, sheet selection and 16-tile autotiling (the 47-tile blob set moves to Phase 9) wait on art decisions. Rivers use flow accumulation over the priority-flooded surface (every cell drains downhill; rivers are cells with enough upstream area) rather than walking from hand-picked sources: same downhill rule, but merging and termination fall out of it. Water is walkable until Phase 9.
+
 Bring the surface up to where the maze already is: generated from a seed, rendered on the shared grid, walkable, and covered by tests and headless runs. **Generation only** — no entrances, no seasons, no survival systems.
 
 **Exit criteria:** one seed fully determines the island; the player can walk it; biomes, height, rivers and lakes read as governed rather than random; headless scenarios and tests cover all of it.
@@ -166,7 +168,7 @@ Bring the surface up to where the maze already is: generated from a seed, render
 - **Flat**, for now. Height shows only through biome tiles (sand → grass → rock → snow) — no hillshading, no cliffs. Height has **no effect on movement**, for now.
 - `OverworldRenderer` in `render/`, with wrap-aware chunk culling.
 - **Y-sorted render queue** shared by both worlds, replacing the maze's three fixed layers: one drawable queue sorted by base Y in world pixels, bucket-sorted (O(k)).
-- **8-bit (47-tile blob) autotiling** for biome and coast borders.
+- **16-tile (corner) autotiling** for biome and coast borders; the 47-tile blob upgrade is a Phase 9 polish item.
 - **Art from the packs first** — Pixel Crawler `Floors_Tiles`, `Water_tiles`, `Vegetation`, `Trees/`, `Rocks`. Sand/beach has no pack match and is the likely first `/generate-asset`.
 - **First task: a test quantize of the Pixel Crawler sheets.** The master palette was sampled mostly from underworld art and fits those sheets poorly before quantizing. If greens and blues flatten, extend the palette (approved by hand, as before).
 
