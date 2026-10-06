@@ -15,12 +15,21 @@
         "CMAKE_MAKE_PROGRAM": "C:/ProgramData/mingw64/mingw64/bin/mingw32-make.exe",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
+    },
+    {
+      "name": "mingw-agent",
+      "inherits": "mingw-debug",
+      "displayName": "MinGW Debug (agent)",
+      "description": "The same build in build-agent/, so an AI agent can build while the game in build/ is running.",
+      "binaryDir": "${sourceDir}/build-agent"
     }
   ],
   "buildPresets": [
-    { "name": "mingw-debug", "configurePreset": "mingw-debug", "jobs": 0 }
+    { "name": "mingw-debug", "configurePreset": "mingw-debug", "jobs": 0 },
+    { "name": "mingw-agent", "configurePreset": "mingw-agent", "jobs": 0 }
   ],
   "testPresets": [
-    { "name": "mingw-debug", "configurePreset": "mingw-debug", "output": { "outputOnFailure": true } }
+    { "name": "mingw-debug", "configurePreset": "mingw-debug", "output": { "outputOnFailure": true } },
+    { "name": "mingw-agent", "configurePreset": "mingw-agent", "output": { "outputOnFailure": true } }
   ]
 }

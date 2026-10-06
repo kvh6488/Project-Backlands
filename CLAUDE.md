@@ -24,6 +24,16 @@ cmake --build --preset mingw-debug
 
 (`cmake --build build -j` is equivalent once configured.)
 
+**`build/` belongs to the user; agents build in `build-agent/`.** Windows locks a running `.exe`, so an agent relinking `build/` while the user plays fails at the link step and leaves a stale game. Agents use the `mingw-agent` preset (same configuration, other folder) and run from there:
+
+```bash
+cmake --preset mingw-agent && cmake --build --preset mingw-agent
+```
+
+```bash
+cd build-agent && ./Backrooms.exe
+```
+
 Run the game — **must run with `build/` as the working directory**, because assets are loaded via relative paths like `assets/magic_trip.fs`:
 
 ```bash

@@ -1,5 +1,6 @@
 # CMake & Build outputs
 build/
+build-agent/
 out/
 bin/
 *.exe
