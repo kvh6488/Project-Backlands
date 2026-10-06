@@ -17,9 +17,10 @@ struct IslandConfig {
 
   // Tiles across the whole wrapping world (square). The island fits inside
   // a circle of diameter size * kIslandFraction, leaving open ocean on every
-  // side: at 3072 that is a 2048-tile island with 512 tiles of sea to the
-  // wrap seam, so no generator has to be seamless across it.
-  int size = 3072;
+  // side: at 4000 that is a 2666-tile island with 667 tiles of sea to the
+  // wrap seam, so no generator has to be seamless across it. Must stay a
+  // multiple of kChunk (and so of kCoarse).
+  int size = 4000;
   static constexpr float kIslandFraction = 2.0f / 3.0f;
 
   int radius() const { return (int)(size * kIslandFraction / 2.0f); }

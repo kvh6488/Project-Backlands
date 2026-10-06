@@ -27,7 +27,10 @@ bool inLayer(int layer, Biome b, uint8_t shade) {
   switch (layer) {
   case GROUND: return !isWater(b);
   case GRASS: return !isWater(b) && b != Biome::BEACH;
-  case MEADOW: return (b == Biome::GRASSLAND && shade >= 1) || b == Biome::FOREST;
+  // Coastal scrub's floor is the meadow edge, so it blends into grassland
+  // and forest through the same overlays.
+  case MEADOW:
+    return (b == Biome::GRASSLAND && shade >= 1) || b == Biome::FOREST || b == Biome::COASTAL;
   case FOREST: return b == Biome::FOREST;
   case FOREST_DEEP: return b == Biome::FOREST && shade == 3;
   default: return false;
@@ -35,19 +38,21 @@ bool inLayer(int layer, Biome b, uint8_t shade) {
 }
 
 // assets/ow_terrain.png: grass (the corner shape in column `mask`, full fills
-// in columns kFillCol..), sand fills, then the bank rows - mud, and two steps
-// paler toward the sand for banks near a beach. GROUND draws a bank row's
+// in columns kFillCol..), sand fills, then the bank rows - mud, and one step
+// paler per tile nearer a beach, kBankSteps of them, ending at the sand's tan. GROUND draws a bank row's
 // edges and its fill is sand or mud.
 // assets/ow_shades.png: one row per overlay, 81 three-state corner tiles
 // (TL*27 + TR*9 + BL*3 + BR; 0 off the grass, 1 grass, 2 shaded), then fills.
-constexpr int kGrassRow = 0, kSandRow = 1, kBankRow = 2; // + 0..2 toward sand
+constexpr int kGrassRow = 0, kSandRow = 1, kBankRow = 2; // + 0..kBankSteps toward sand
+constexpr int kBankSteps = 4;
 constexpr int kShadeFillCol = 81;
 constexpr int kFillCol = 16, kFillCount = 4;
 
 // The fade materials: rows of assets/ow_fades.png, and the `layer` the fade
 // shader is told. Land fades draw over the grass, clipped to its shape; swamp
 // water draws over the water through corner masks, like a shade overlay.
-enum FadeMaterial { FADE_SWAMP, FADE_WETLAND, FADE_GRAVEL, FADE_SNOW, FADE_DRIFT };
+// Dune sand is the beach running into coastal scrub, and its sand patches.
+enum FadeMaterial { FADE_SWAMP, FADE_WETLAND, FADE_GRAVEL, FADE_SNOW, FADE_DRIFT, FADE_DUNE };
 
 // assets/ow_coast.png: High Tides' sand coast. The island block (sand blob in
 // water) holds the shapes with 1-2 sand corners, the lake block (water hole in
@@ -60,7 +65,7 @@ constexpr CoastTile kCoast[16] = {
     {7, 2},   {-1, -1}, {7, 1}, {1, 2}, {6, 2}, {3, 0}, {1, 0},  {-1, -1}};
 constexpr int kCoastFrameRows = 4; // frame f starts at row 1 + 4f
 constexpr int kCoastFrames = 3;
-constexpr float kCoastFrameSeconds = 0.4f;
+constexpr float kCoastFrameSeconds = 0.4f / 0.675f; // the foam washes at 0.675 of the pack's pace
 
 // River water's speed, in art px per second along its flow step.
 constexpr float kFlowSpeed = 6.0f;
@@ -105,6 +110,10 @@ constexpr Pick kForestTrees[] = {
 constexpr Pick kWetlandTrees[] = {{WILLOW, 2}, {WILLOW_S_A, 2}, {WILLOW_S_B, 2},
                                   {WILLOW_S_C, 2}};
 constexpr Pick kBeachTrees[] = {{PALM_TALL, 1}, {PALM_SHORT, 1}};
+// Coastal scrub: no tree over 7 tiles, and palms the most common.
+constexpr Pick kCoastalTrees[] = {
+    {PALM_TALL, 4},    {PALM_SHORT, 4},    {PC1_S2_GREEN, 3}, {PC3_S2_GREEN, 3},
+    {PC1_S3_GREEN, 2}, {OAK_SUMMER_A, 1},  {OAK_SUMMER_B, 1}, {PC1_S2_TAN, 1}};
 constexpr Pick kMountainPines[] = {
     {PC2_S2_TEAL, 2},   {PC2_S2_TEAL_B, 2}, {PC2_S2_GREEN, 2},   {PC2_S2_GREEN_B, 2},
     {PC2_S3_TEAL, 2},   {PC2_S3_TEAL_B, 2}, {PC2_S3_GREEN, 2},   {PC2_S3_GREEN_B, 2},
@@ -140,6 +149,7 @@ std::span<const Pick> poolFor(PropType type, Biome b) {
   case PropType::TREE:
     if (b == Biome::WETLAND) return kWetlandTrees;
     if (b == Biome::BEACH) return kBeachTrees;
+    if (b == Biome::COASTAL) return kCoastalTrees;
     if (b == Biome::GRASSLAND) return kGrasslandTrees;
     return kForestTrees;
   case PropType::PINE:
@@ -193,6 +203,7 @@ DecalOdds decalOdds(Biome b, uint8_t shade) {
   case Biome::MOUNTAIN: return {0.10f, kMountainDecals};
   case Biome::SNOW: return {0.08f, kSnowDecals};
   case Biome::BEACH: return {0.04f, kBeachDecals};
+  case Biome::COASTAL: return shade ? DecalOdds{0.04f, kBeachDecals} : DecalOdds{0.10f, kMeadowDecals};
   // Of the water tiles near a shore only (drawDecals): stones in mid-lake
   // read as litter.
   case Biome::LAKE: case Biome::RIVER: return {0.01f, kFreshWaterDecals};
@@ -280,6 +291,7 @@ Color OverworldRenderer::biomeColour(Biome b) {
   case Biome::WETLAND: return theme::wetland;
   case Biome::MOUNTAIN: return theme::mountain;
   case Biome::SNOW: return theme::snow;
+  case Biome::COASTAL: return theme::coastal;
   default: return theme::ground;
   }
 }
@@ -428,7 +440,7 @@ void OverworldRenderer::renderTerrain(const Overworld &world,
   drawFade(FADE_SWAMP, x0, y0, w, h);
   for (int layer = 0; layer < LAYER_COUNT; ++layer)
     drawLayer(layer, x0, y0, w, h, frame);
-  for (int fade : {FADE_WETLAND, FADE_GRAVEL, FADE_SNOW, FADE_DRIFT})
+  for (int fade : {FADE_DUNE, FADE_WETLAND, FADE_GRAVEL, FADE_SNOW, FADE_DRIFT})
     drawFade(fade, x0, y0, w, h);
   drawDecals(x0, y0, w, h);
 }
@@ -469,30 +481,45 @@ void OverworldRenderer::drawGlints(int x0, int y0, int w, int h) const {
 // beach each cache cell is, for the bank rows.
 void OverworldRenderer::buildFades(int x0, int y0, int w, int h) {
   const int n = m_cellsW * m_cellsH;
-  std::vector<uint8_t> land(n), water(n), all(n, 1);
+  std::vector<uint8_t> land(n), water(n), ground(n), all(n, 1);
   std::vector<float> depth;
-  std::vector<uint8_t> in[6]; // wetland, gravel, snow, drift, swamp, beach
+  std::vector<uint8_t> in[7]; // wetland, gravel, snow, drift, swamp, sandy bank, dune
   for (auto &v : in)
     v.resize(n);
   for (int k = 0; k < n; ++k) {
     const Cell &c = m_cells[k];
     land[k] = inLayer(GRASS, c.biome, c.shade);
     water[k] = isWater(c.biome);
+    ground[k] = !water[k];
     in[0][k] = c.biome == Biome::WETLAND;
     in[1][k] = c.biome == Biome::MOUNTAIN || c.biome == Biome::SNOW; // gravel runs under snow
     in[2][k] = c.biome == Biome::SNOW;
     in[3][k] = c.biome == Biome::SNOW && c.shade >= 1;
     in[4][k] = c.biome == Biome::SWAMP;
-    in[5][k] = c.biome == Biome::BEACH;
+    // Coastal scrub's banks are sand too, like a beach's: the bank rows pale
+    // to sand within it and fade back to mud over kBankSteps tiles outside.
+    in[5][k] = c.biome == Biome::BEACH || c.biome == Biome::COASTAL;
+    in[6][k] = (c.biome == Biome::BEACH || c.biome == Biome::COASTAL) && c.shade == 1;
   }
-  std::vector<float> share[4], beach1, beach2;
+  std::vector<float> share[4], beach, dune;
   for (int f = 0; f < 4; ++f)
     shareWithin(in[f], land, m_cellsW, m_cellsH, kFadeRadius, share[f]);
+  // Out of all dry cells, not just the grass, and doubled: a share is only
+  // ~0.5 at the beach's edge, and the grass's edge must vanish under solid
+  // sand there, or the dither stops along a visible line.
+  shareWithin(in[6], ground, m_cellsW, m_cellsH, kDuneRadius, dune);
+  for (float &d : dune)
+    d = std::min(1.0f, 2.0f * d);
   swampDepth(water, in[4], m_cellsW, m_cellsH, depth);
-  shareWithin(in[5], all, m_cellsW, m_cellsH, 1, beach1);
-  shareWithin(in[5], all, m_cellsW, m_cellsH, 2, beach2);
+  // Bank step: kBankSteps with a beach in the 3x3 block, one fewer per ring out.
   for (int k = 0; k < n; ++k)
-    m_cells[k].bank = beach1[k] > 0.0f ? 2 : beach2[k] > 0.0f ? 1 : 0;
+    m_cells[k].bank = 0;
+  for (int r = kBankSteps; r >= 1; --r) {
+    shareWithin(in[5], all, m_cellsW, m_cellsH, r, beach);
+    for (int k = 0; k < n; ++k)
+      if (beach[k] > 0.0f)
+        m_cells[k].bank = (uint8_t)(kBankSteps + 1 - r);
+  }
 
   // The data covers cells x0-1 .. x0+w (and the same in y).
   const int tw = w + 2, th = h + 2;
@@ -508,14 +535,15 @@ void OverworldRenderer::buildFades(int x0, int y0, int w, int h) {
       const int k = (j + kCacheMargin - 1) * m_cellsW + (i + kCacheMargin - 1);
       Color &wpx = m_weightPx[j * tw + i];
       wpx = {byte(share[0][k]), byte(share[1][k]), byte(share[2][k]), byte(share[3][k])};
-      // g: swamp depth, 0..1 over kSwampReach tiles, read bilinear.
+      // g: swamp depth, 0..1 over kSwampReach tiles; b: dune sand. Both bilinear.
       m_infoPx[j * tw + i] = {(unsigned char)(land[k] ? 255 : 0),
-                              byte(depth[k] / (float)kSwampReach), 0, 255};
+                              byte(depth[k] / (float)kSwampReach), byte(dune[k]), 255};
       m_fadeUsed[FADE_SWAMP] |= in[4][k] != 0;
       m_fadeUsed[FADE_WETLAND] |= wpx.r > 0;
       m_fadeUsed[FADE_GRAVEL] |= wpx.g > 0;
       m_fadeUsed[FADE_SNOW] |= wpx.b > 0;
       m_fadeUsed[FADE_DRIFT] |= wpx.a > 0;
+      m_fadeUsed[FADE_DUNE] |= m_infoPx[j * tw + i].b > 0;
     }
   }
   for (Texture2D *t : {&m_weights, &m_info}) {

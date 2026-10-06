@@ -24,9 +24,12 @@
 //           raised further, over a wider halo, near swamp water
 //           (island::landMoisture); beach only
 //           within a wobbling reach of the ocean
+//   coastal grassland or forest within a wobbling reach of a shore cell the
+//           IslandMap chose for coastal scrub; beach there is dune beach
 //   shade   how far moisture is past the forest line (grassland and forest),
-//           or a drift field (snow), cut into steps - so the ground can
-//           fade across a border the biome itself switches at
+//           or a drift field (snow), or sand patches (coastal), cut into
+//           steps - so the ground can fade across a border the biome itself
+//           switches at
 //   flow    river water's downstream direction: its nearest reach's, which
 //           runs from the upstream cell's node to its receiver's
 //
@@ -40,7 +43,8 @@ struct TileSample {
   float moisture = 0.0f;
   // A step inside the biome, for the renderer's fades and the prop density:
   // grassland 0 open / 1 meadow edge; forest 2 edge / 3 deep; snow 0 / 1
-  // drift. 0 elsewhere.
+  // drift; coastal 0 / 1 sand patch; beach 0 / 1 dune beach (backs coastal
+  // scrub). 0 elsewhere.
   uint8_t shade = 0;
   // River water's downstream direction (flowStep), 0 for still water and land.
   uint8_t flow = 0;
@@ -82,6 +86,8 @@ public:
   // Moisture past the forest line where the shade steps (jittered per tile).
   static constexpr float kMeadowMargin = -0.04f;    // grassland 0 -> 1
   static constexpr float kDeepForestMargin = 0.05f; // forest 2 -> 3
+  // Coastal tiles whose patch noise beats this are sand; the bar rises inland.
+  static constexpr float kSandPatch = 0.30f;
 
 private:
   void chooseSpawn();

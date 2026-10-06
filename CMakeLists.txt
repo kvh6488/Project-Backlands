@@ -75,6 +75,7 @@ set(BACKROOMS_GAME_SOURCES
     src/render/player_renderer.cpp
     src/render/item_renderer.cpp
     src/render/overworld_renderer.cpp
+    src/render/step_effects.cpp
     src/states/maze_state.cpp
     src/states/overworld_state.cpp
     src/ui/ui_manager.cpp

@@ -101,9 +101,11 @@ TileSample Island::sample(int x, int y) const {
     return out;
   }
 
+  // An open lake's banks are never wetland (see island::kOpenLakeDry).
+  const bool dryBank = distAt(m_map.openLakeDist, px, py) < island::kOpenLakeDry;
   // After the rivers, so a river crossing a dip below sea level runs on
   // through it rather than breaking into marsh.
-  if (out.height < 0.0f) {
+  if (out.height < 0.0f && !dryBank) {
     out.biome = Biome::WETLAND;
     return out;
   }
@@ -112,6 +114,8 @@ TileSample Island::sample(int x, int y) const {
   out.moisture = island::landMoisture(m_field.moistureNoise(px, py),
                                       distAt(m_map.waterDist, px, py),
                                       distAt(m_map.swampDist, px, py));
+  if (dryBank)
+    out.moisture = std::min(out.moisture, biome::kWetlandMoisture - 0.01f);
   // Beach width wobbles along the coast, measured from ocean cell centres.
   // Two octaves: the bilinear field alone leaves straight runs inside a cell.
   float beachReach =
@@ -119,6 +123,26 @@ TileSample Island::sample(int x, int y) const {
       0.25f * noise::gradient(px / 11.0f, py / 11.0f, m_seed ^ 0x5a4d1u);
   out.biome = biome::classifyLand(out.height, out.temperature, out.moisture,
                                   oceanDist < beachReach);
+  // Coastal scrub: inside the zone grassland and forest give way to it, and
+  // the beach in front of it is a dune beach (palms, sand blending inland).
+  const float coastal = distAt(m_map.coastalDist, px, py);
+  const float coastReach =
+      island::kCoastalReach +
+      island::kCoastalWobble * noise::gradient(px / 23.0f, py / 23.0f, m_seed ^ 0xc0a57u);
+  if (coastal < coastReach) {
+    if (out.biome == Biome::BEACH) {
+      out.shade = 1;
+      return out;
+    }
+    if (out.biome == Biome::GRASSLAND || out.biome == Biome::FOREST) {
+      out.biome = Biome::COASTAL;
+      // Sand patches, a little more often nearer the beach.
+      float sand = noise::gradient(px / 9.0f, py / 9.0f, m_seed ^ 0x5a2d0u) +
+                   0.15f * noise::gradient(px / 3.0f, py / 3.0f, m_seed ^ 0xd00e5u);
+      out.shade = sand > kSandPatch + 0.12f * (coastal / coastReach) ? 1 : 0;
+      return out;
+    }
+  }
   if (out.biome == Biome::GRASSLAND || out.biome == Biome::FOREST) {
     // The jitter roughens the step contours, which on broad moisture noise
     // would otherwise be long smooth curves.

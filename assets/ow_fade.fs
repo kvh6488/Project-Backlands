@@ -1,7 +1,8 @@
 #version 330
 
 // ============================================================================
-// ow_fade - one fade material (swamp water, wetland, gravel, snow, drift)
+// ow_fade - one fade material (swamp water, wetland, gravel, snow, drift,
+// dune sand)
 // drawn pixel by pixel over the view. OverworldRenderer::drawFade.
 //
 // SWAMP WATER (layer 0) is drawn in passes, one per tint `level` (1 faint ..
@@ -32,18 +33,18 @@ in vec4 fragColor;
 
 uniform sampler2D texture0; // assets/ow_fades.png
 uniform sampler2D weights;  // per cell: wetland, gravel, snow, drift
-uniform sampler2D info;     // per cell: r = land (grass) flag, g = swamp depth 0..1
+uniform sampler2D info;     // per cell: r = land (grass) flag, g = swamp depth 0..1, b = dune sand
 uniform sampler2D swampWater; // assets/ow_swamp_water.png: a tiling square per level
 uniform int level;          // swamp water's tint pass, 1..4
 uniform ivec2 sway;         // the still water's offset now, art px
 uniform ivec2 cellOrigin;   // world cell of texel (0, 0) in weights and info
-uniform int layer;          // the sheet row: 0 swamp, 1 wetland, 2 gravel, 3 snow, 4 drift
+uniform int layer;          // the sheet row: 0 swamp, 1 wetland, 2 gravel, 3 snow, 4 drift, 5 dune
 
 out vec4 finalColor;
 
 const int T = 16;        // art px per cell
 const int kFills = 8;    // fill variants per row
-const int kMaskRow = 5;  // the corner shapes
+const int kMaskRow = 6;  // the corner shapes
 
 const int kBayer[16] = int[16](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
 
@@ -106,7 +107,8 @@ void main() {
   // Coverage. Cell (i) of the data covers art px [i, i+1) * T, its texel
   // centre at the cell's centre, so `uv` lands bilinear between cell centres.
   vec4 ws = texture(weights, uv);
-  float w = layer == 1 ? ws.r : layer == 2 ? ws.g : layer == 3 ? ws.b : min(ws.a, ws.b);
+  float w = layer == 1 ? ws.r : layer == 2 ? ws.g : layer == 3 ? ws.b
+          : layer == 4 ? min(ws.a, ws.b) : texture(info, uv).b;
   uint salt = uint(layer) * 0x9e3779b9u;
   float n = 0.18 * (2.0 * valueNoise(art / 7.0, salt) - 1.0) +
             0.06 * (2.0 * valueNoise(art / 2.5, salt ^ 0x51edu) - 1.0);

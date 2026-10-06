@@ -7,6 +7,7 @@
 #include "render/item_renderer.hpp"
 #include "render/overworld_renderer.hpp"
 #include "render/player_renderer.hpp"
+#include "render/step_effects.hpp"
 #include "states/game_state.hpp"
 #include "states/run.hpp"
 #include "ui/ui_manager.hpp"
@@ -26,8 +27,8 @@
 //
 // Frame pipeline (a cut-down MazeState::render - no light mask, no trip
 // shader, no radiation):
-//   1. Scene into m_screenTarget: terrain, then the Y-sorted queue (player,
-//      dropped items, props).
+//   1. Scene into m_screenTarget: terrain, snow prints, then the Y-sorted
+//      queue (player, wetland squishes, dropped items, props).
 //   2. Blit to the window at blitScale, then UIManager, then DebugOverlay.
 // ============================================================================
 class OverworldState : public GameState {
@@ -78,6 +79,7 @@ private:
   OverworldRenderer m_renderer;
   ItemRenderer m_itemRenderer;
   PlayerRenderer m_playerRenderer;
+  StepEffects m_stepEffects;
   DrawQueue m_drawQueue;
   float m_totalTime = 0.0f;
 };

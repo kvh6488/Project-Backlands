@@ -29,7 +29,7 @@
 // A layer's tiles are transparent outside its shape, so the layer beneath
 // shows through and a three-biome corner needs no special tile.
 //
-// FADES: wetland, gravel, snow and drifts have no tiles. Each is one quad
+// FADES: wetland, gravel, snow, drifts and dune sand have no tiles. Each is one quad
 // over the view through a shader (assets/ow_fade.fs) that draws a pixel
 // where the material's share of the nearby cells (shareWithin), read
 // bilinear, beats an ordered-dither threshold - so any two of them blend over
@@ -94,6 +94,8 @@ public:
                           int radius, std::vector<float> &out);
   // How far (tiles) a fade reaches either side of a border.
   static constexpr int kFadeRadius = 2;
+  // Dune sand's, one wider: it runs from a beach several tiles into scrub.
+  static constexpr int kDuneRadius = kFadeRadius + 1;
   // Swamp water's tint passes (lake blue toward murk), and how many tiles
   // its colour takes to change.
   static constexpr int kSwampSteps = 4;
@@ -139,7 +141,7 @@ private:
     Biome biome;
     uint8_t shade;
     uint8_t flow;
-    uint8_t bank; // 0 far from a beach; 1, 2 nearer - the paler bank rows
+    uint8_t bank; // 0 far from a beach; up to kBankSteps nearer - the paler bank rows
   };
 
   void drawLayer(int layer, int x0, int y0, int w, int h, int frame) const;
@@ -163,7 +165,7 @@ private:
   Texture2D m_weights{}, m_info{};
   std::vector<Color> m_weightPx, m_infoPx;
   int m_fadeX0 = 0, m_fadeY0 = 0;
-  bool m_fadeUsed[5] = {};
+  bool m_fadeUsed[6] = {};
   const Overworld *m_world = nullptr;
   Vector2 m_focus{};
   float m_time = 0.0f; // renderTerrain's, for the lapping roots, glints and sway

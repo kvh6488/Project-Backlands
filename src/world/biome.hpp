@@ -17,6 +17,9 @@
 //      real Whittaker diagram plots climate zones on exactly these two axes;
 //      a small table of it is the standard game shorthand. New biomes (taiga,
 //      desert) slot in as new cells, not new branches.
+//   4. Coastal scrub - not climate but place: grassland or forest inside a
+//      coastal zone (IslandMap::coastalDist) becomes COASTAL. Applied after
+//      the lookup, so snow, rock and wetland still win on a chosen shore.
 // ============================================================================
 enum class Biome : uint8_t {
   OCEAN,
@@ -29,6 +32,7 @@ enum class Biome : uint8_t {
   WETLAND,
   MOUNTAIN,
   SNOW,
+  COASTAL, // dune scrub behind a sheltered beach: meadow grass, palms, sand
   COUNT
 };
 
@@ -49,6 +53,7 @@ inline const char *biomeId(Biome b) {
   case Biome::WETLAND: return "WETLAND";
   case Biome::MOUNTAIN: return "MOUNTAIN";
   case Biome::SNOW: return "SNOW";
+  case Biome::COASTAL: return "COASTAL";
   default: return "NONE";
   }
 }

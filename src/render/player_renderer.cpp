@@ -42,6 +42,7 @@ void PlayerRenderer::update(float dt, const Player &player) {
     while (m_frameTimer >= FRAME_DURATION) {
       m_currentFrame = (m_currentFrame + 1) % FRAME_COUNT;
       m_frameTimer -= FRAME_DURATION;
+      m_footfall = true;
     }
   } else {
     // Player stopped — snap to idle pose (frame 0), reset timer.

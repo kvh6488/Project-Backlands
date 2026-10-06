@@ -39,5 +39,6 @@ inline constexpr Color forest = pal::green[6];
 inline constexpr Color wetland = pal::green[3];
 inline constexpr Color mountain = pal::grey[6];
 inline constexpr Color snow = pal::grey[11];
+inline constexpr Color coastal = pal::yellow[7];
 
 }  // namespace theme

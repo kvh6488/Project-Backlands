@@ -27,6 +27,17 @@ public:
   // Called once per frame from Application::update().
   void update(float dt, const Player &player);
 
+  // True once per walk frame advanced, then cleared - a step for StepEffects.
+  // Every frame, not only the two foot-down ones: the cycle covers ~3 tiles
+  // at walking speed, so prints on contact frames alone fall 1.6 tiles apart
+  // and read as dots, not a trail. A mailbox like Player's pollEvent*s; the
+  // maze has no use for it.
+  bool pollFootfall() {
+    bool f = m_footfall;
+    m_footfall = false;
+    return f;
+  }
+
   // Queues the player at the bottom edge of its sprite - its feet - and binds
   // it until the queue is flushed.
   void collect(const Player &player, DrawQueue &queue);
@@ -44,6 +55,7 @@ private:
   // --- Animation State ---
   int m_currentFrame;    // Current frame index in the walk cycle (0–3)
   float m_frameTimer;    // Accumulator tracking time since last frame advance
+  bool m_footfall = false;
 
   // Walk cycle plays at ~6.7 FPS (0.15s per frame).
   // This is a tunable constant — increase for slower animation, decrease for

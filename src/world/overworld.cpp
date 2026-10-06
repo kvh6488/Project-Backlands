@@ -38,7 +38,7 @@ PropType Overworld::rollProp(Biome b, uint8_t shade, int x, int y,
       /* LAKE      */ {},
       /* RIVER     */ {},
       /* SWAMP     */ {},
-      /* BEACH     */ {{PropType::TREE, 0.04f}, {PropType::ROCK, 0.03f}},
+      /* BEACH     */ {{PropType::ROCK, 0.03f}}, // palms only on a dune beach
       /* GRASSLAND */ {{PropType::TREE, 0.07f}, {PropType::BUSH, 0.10f},
                        {PropType::ROCK, 0.02f}},
       /* FOREST    */ {{PropType::TREE, 0.70f}, {PropType::BUSH, 0.10f}},
@@ -46,7 +46,14 @@ PropType Overworld::rollProp(Biome b, uint8_t shade, int x, int y,
                        {PropType::BUSH, 0.06f}},
       /* MOUNTAIN  */ {{PropType::ROCK, 0.16f}, {PropType::PINE, 0.08f}},
       /* SNOW      */ {{PropType::PINE, 0.04f}, {PropType::ROCK, 0.04f}},
+      // ~65 % of the forest's trees, short ones and palms (spriteFor).
+      /* COASTAL   */ {{PropType::TREE, 0.45f}, {PropType::BUSH, 0.12f},
+                       {PropType::ROCK, 0.02f}},
   };
+  static const std::vector<Odds> kDuneBeach = {{PropType::TREE, 0.08f},
+                                               {PropType::ROCK, 0.03f}};
+  static const std::vector<Odds> kSandPatch = {{PropType::TREE, 0.12f},
+                                               {PropType::BUSH, 0.06f}};
   static const std::vector<Odds> kMeadowEdge = {
       {PropType::TREE, 0.22f}, {PropType::BUSH, 0.12f}, {PropType::ROCK, 0.02f}};
   static const std::vector<Odds> kForestEdge = {{PropType::TREE, 0.45f},
@@ -56,6 +63,10 @@ PropType Overworld::rollProp(Biome b, uint8_t shade, int x, int y,
     odds = &kMeadowEdge;
   else if (b == Biome::FOREST && shade == 2)
     odds = &kForestEdge;
+  else if (b == Biome::BEACH && shade == 1)
+    odds = &kDuneBeach;
+  else if (b == Biome::COASTAL && shade == 1)
+    odds = &kSandPatch;
   uint32_t seed = m_island.seed();
   float roll = noise::unit(x, y, seed ^ 0x7a3e11c5u);
   variant = (uint8_t)(noise::hash(x, y, seed ^ 0x1b873593u) & 0xffu);

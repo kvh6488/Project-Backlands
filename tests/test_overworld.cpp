@@ -1,6 +1,8 @@
 #include "entities/player.hpp"
 #include "items/item_database.hpp"
 #include "render/overworld_renderer.hpp"
+#include "render/player_renderer.hpp"
+#include "render/step_effects.hpp"
 #include "world/generators/poisson.hpp"
 #include "world/noise.hpp"
 #include "world/overworld.hpp"
@@ -245,8 +247,8 @@ TEST(OverworldTest, ShoreHasNoNubsOrCornerJoins) {
   // water tiles that meet only at a corner - over a lake-and-river country.
   const Overworld &w = sharedWorld();
   auto wet = [&](int x, int y) { return isWater(w.biomeAt(x, y)); };
-  for (int y = 600; y < 1100; ++y)
-    for (int x = 1400; x < 1900; ++x) {
+  for (int y = 900; y < 1400; ++y)
+    for (int x = 2200; x < 2700; ++x) {
       const bool a = wet(x, y), b = wet(x + 1, y), c = wet(x, y + 1), d = wet(x + 1, y + 1);
       ASSERT_FALSE((a && d && !b && !c) || (b && c && !a && !d)) << x << "," << y;
       if (a)
@@ -261,7 +263,7 @@ TEST(OverworldTest, ShoreTidyIsExactInsideItsApron) {
   // A chunk is tidied with a kPasses-tile apron; its core must match the
   // whole grid tidied at once, or chunks would disagree at their borders.
   const Island &isl = sharedWorld().island();
-  constexpr int A = shoreline::kPasses, W = 120, x0 = 1640, y0 = 800;
+  constexpr int A = shoreline::kPasses, W = 120, x0 = 2440, y0 = 1000;
   std::vector<TileSample> whole(W * W);
   for (int y = 0; y < W; ++y)
     for (int x = 0; x < W; ++x)
@@ -341,6 +343,82 @@ TEST(IslandTest, TheWrapSeamLiesInOpenOcean) {
     }
   }
   EXPECT_GE(margin, 500);
+}
+
+// Shore cells as chooseCoastal sees them: dry land beside the sea.
+static std::vector<int> shoreCells(const IslandMap &m) {
+  std::vector<int> out;
+  for (int c = 0; c < m.n * m.n; ++c)
+    if (!m.ocean[c] && m.lake[c] < 0 && m.oceanDist[c] <= 1.5f)
+      out.push_back(c);
+  return out;
+}
+
+TEST(IslandTest, CoastalScrubTakesAboutAThirdOfTheCoast) {
+  const IslandMap &m = sharedWorld().island().map();
+  const std::vector<int> shore = shoreCells(m);
+  ASSERT_FALSE(shore.empty());
+  int chosen = 0, covered = 0;
+  for (int c : shore) {
+    chosen += m.coastalShore[c];
+    covered += m.coastalDist[c] < island::kCoastalReach;
+  }
+  // A quantile: the chosen share is exact up to ties.
+  EXPECT_NEAR((float)chosen / shore.size(), island::kCoastalShare, 0.01f);
+  // The zone spreads along the shore from each pick to ~30 % of the coast.
+  EXPECT_GT((float)covered / shore.size(), 0.22f);
+  EXPECT_LT((float)covered / shore.size(), 0.40f);
+  for (int c = 0; c < m.n * m.n; ++c)
+    if (m.coastalShore[c])
+      ASSERT_FALSE(m.ocean[c]) << c;
+}
+
+TEST(IslandTest, CoastalScrubAndDuneBeachesKeepToAChosenShore) {
+  const Island &isl = sharedWorld().island();
+  const IslandMap &m = isl.map();
+  const int k = IslandConfig::kCoarse;
+  // The zone's widest reach (gradient noise stays within +-1), plus a cell
+  // for reading the field per cell rather than bilinear.
+  const float reach = island::kCoastalReach + island::kCoastalWobble + 1.5f;
+  int coastal = 0, sand = 0, dune = 0;
+  for (int y = 0; y < isl.config().size; y += 5) {
+    for (int x = 0; x < isl.config().size; x += 5) {
+      const TileSample s = isl.sample(x, y);
+      const bool zoned = s.biome == Biome::COASTAL || (s.biome == Biome::BEACH && s.shade == 1);
+      if (!zoned)
+        continue;
+      ASSERT_LT(m.coastalDist[m.index(x / k, y / k)], reach) << x << "," << y;
+      coastal += s.biome == Biome::COASTAL;
+      sand += s.biome == Biome::COASTAL && s.shade == 1;
+      dune += s.biome == Biome::BEACH;
+    }
+  }
+  EXPECT_GT(coastal, 0);
+  EXPECT_GT(dune, 0);
+  // Sand patches are occasional, not the floor.
+  EXPECT_GT(sand, 0);
+  EXPECT_LT(sand * 4, coastal);
+}
+
+TEST(OverworldTest, PalmsGrowOnlyBehindShelteredBeaches) {
+  // Every tree on a beach stands on a dune beach. Checked in the chunks over
+  // a spread of shore cells, chosen and not.
+  const Overworld &w = sharedWorld();
+  const IslandMap &m = w.island().map();
+  const std::vector<int> shore = shoreCells(m);
+  const int k = IslandConfig::kCoarse;
+  int duneTrees = 0;
+  for (size_t i = 0; i < shore.size(); i += shore.size() / 60 + 1) {
+    const int c = shore[i];
+    const int cx = Overworld::chunkOf((c % m.n) * k), cy = Overworld::chunkOf((c / m.n) * k);
+    for (const Prop &p : w.chunkProps(cx, cy)) {
+      if (p.type != PropType::TREE || w.biomeAt(p.x, p.y) != Biome::BEACH)
+        continue;
+      ASSERT_EQ(w.shadeAt(p.x, p.y), 1) << p.x << "," << p.y;
+      ++duneTrees;
+    }
+  }
+  EXPECT_GT(duneTrees, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -530,7 +608,21 @@ TEST(OverworldRendererTest, SpeciesFollowTheBiome) {
     EXPECT_TRUE(palm == PALM_TALL || palm == PALM_SHORT);
     Id willow = OverworldRenderer::spriteFor(PropType::TREE, Biome::WETLAND, (uint8_t)v);
     EXPECT_TRUE(willow >= WILLOW && willow <= WILLOW_S_C);
+    // Coastal scrub keeps its trees short; palms grow nowhere else.
+    Id scrub = OverworldRenderer::spriteFor(PropType::TREE, Biome::COASTAL, (uint8_t)v);
+    EXPECT_LE(kFrames[scrub].h, 7) << v;
+    for (Biome b : {Biome::GRASSLAND, Biome::FOREST, Biome::WETLAND, Biome::MOUNTAIN, Biome::SNOW})
+      for (PropType t : {PropType::TREE, PropType::PINE, PropType::BUSH}) {
+        Id id = OverworldRenderer::spriteFor(t, b, (uint8_t)v);
+        EXPECT_TRUE(id != PALM_TALL && id != PALM_SHORT) << biomeId(b);
+      }
   }
+  int palms = 0;
+  for (int v = 0; v < 256; ++v) {
+    Id scrub = OverworldRenderer::spriteFor(PropType::TREE, Biome::COASTAL, (uint8_t)v);
+    palms += scrub == PALM_TALL || scrub == PALM_SHORT;
+  }
+  EXPECT_GT(palms, 256 / 4); // the commonest tree there
 }
 
 // Full-orange autumn waits for Phase 5's seasons; only the light-brown
@@ -635,4 +727,104 @@ TEST(OverworldRendererTest, SpriteFramesDoNotOverlapInTheAtlas) {
       ASSERT_TRUE(apart) << i << " overlaps " << j;
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// StepEffects and the footfall that drives them (no window, no textures)
+// ---------------------------------------------------------------------------
+namespace {
+// The tile nearest spawn (on a coarse lattice) whose 5 x 5 block is `want`.
+bool findBlockOf(const Overworld &w, Biome want, int &tx, int &ty) {
+  for (int r = 0; r < 1200; r += 8)
+    for (int dy = -r; dy <= r; dy += 8)
+      for (int dx = -r; dx <= r; dx += 8) {
+        if (std::max(std::abs(dx), std::abs(dy)) != r)
+          continue;
+        const int x = w.spawnX() + dx, y = w.spawnY() + dy;
+        bool all = true;
+        for (int j = -2; j <= 2 && all; ++j)
+          for (int i = -2; i <= 2 && all; ++i)
+            all = w.biomeAt(x + i, y + j) == want;
+        if (all) {
+          tx = x;
+          ty = y;
+          return true;
+        }
+      }
+  return false;
+}
+} // namespace
+
+TEST(StepEffectsTest, SnowTakesPrintsWetlandSquishesSandKicksTheRestNothing) {
+  EXPECT_EQ(StepEffects::markFor(Biome::SNOW), StepEffects::Mark::PRINT);
+  EXPECT_EQ(StepEffects::markFor(Biome::WETLAND), StepEffects::Mark::SQUISH);
+  EXPECT_EQ(StepEffects::markFor(Biome::BEACH), StepEffects::Mark::KICK);
+  EXPECT_EQ(StepEffects::markFor(Biome::COASTAL, 1), StepEffects::Mark::KICK); // sand patch
+  EXPECT_EQ(StepEffects::markFor(Biome::COASTAL, 0), StepEffects::Mark::KICK_PALE); // grass
+  for (Biome b : {Biome::GRASSLAND, Biome::FOREST, Biome::MOUNTAIN,
+                  Biome::SWAMP, Biome::LAKE})
+    EXPECT_EQ(StepEffects::markFor(b), StepEffects::Mark::NONE) << biomeId(b);
+}
+
+TEST(StepEffectsTest, APrintLastsItsLifeAndASprayItsFrames) {
+  StepEffects fx;
+  fx.leave(StepEffects::Mark::PRINT, {0, 0}, FacingDirection::DOWN);
+  fx.leave(StepEffects::Mark::SQUISH, {0, 0}, FacingDirection::DOWN);
+  fx.leave(StepEffects::Mark::KICK, {0, 0}, FacingDirection::DOWN);
+  EXPECT_EQ(fx.liveCount(), 3);
+  fx.advance(StepEffects::kSquishFrames * StepEffects::kSquishFrameSeconds + 0.01f);
+  EXPECT_EQ(fx.liveCount(), 1) << "the squish and the kick have played out";
+  fx.advance(StepEffects::kPrintSeconds - 0.5f);
+  EXPECT_EQ(fx.liveCount(), 1);
+  fx.advance(0.5f);
+  EXPECT_EQ(fx.liveCount(), 0);
+}
+
+TEST(StepEffectsTest, TheRingKeepsTheNewestMarks) {
+  StepEffects fx;
+  for (int i = 0; i < StepEffects::kCapacity + 40; ++i)
+    fx.leave(StepEffects::Mark::PRINT, {(float)i, 0}, FacingDirection::DOWN);
+  EXPECT_EQ(fx.liveCount(), StepEffects::kCapacity);
+  fx.leave(StepEffects::Mark::NONE, {0, 0}, FacingDirection::DOWN);
+  EXPECT_EQ(fx.liveCount(), StepEffects::kCapacity) << "NONE takes no slot";
+}
+
+// Through update(): the world under the foot picks the mark, and a footfall
+// that has not moved since the last one (walking into a tree) leaves none.
+TEST(StepEffectsTest, FootfallsInSnowLeavePrintsButNotOnTheSpot) {
+  const Overworld &w = sharedWorld();
+  int tx, ty;
+  ASSERT_TRUE(findBlockOf(w, Biome::SNOW, tx, ty));
+  const float cell = (float)w.getCellSize();
+  Player player({tx * cell + cell / 2.0f, ty * cell}, AreaState::ROOM);
+  StepEffects fx;
+  fx.update(w, player, false, 0.1f);
+  EXPECT_EQ(fx.liveCount(), 0) << "no footfall, no print";
+  fx.update(w, player, true, 0.1f);
+  EXPECT_EQ(fx.liveCount(), 1);
+  fx.update(w, player, true, 0.1f);
+  EXPECT_EQ(fx.liveCount(), 1) << "stood still: no second print";
+  player.teleport({player.getPosition().x, player.getPosition().y + 20.0f}, AreaState::ROOM);
+  fx.update(w, player, true, 0.1f);
+  EXPECT_EQ(fx.liveCount(), 2);
+}
+
+// A footfall on every walk frame (0.2 s each), so a snow trail stays dense.
+TEST(StepEffectsTest, TheWalkCycleRaisesAFootfallOnEveryFrame) {
+  Overworld w(kSeed);
+  const float cell = (float)w.getCellSize();
+  Player player({w.spawnX() * cell + cell / 2.0f, w.spawnY() * cell + cell / 2.0f},
+                AreaState::ROOM);
+  PlayerRenderer renderer;
+  InputState walk;
+  walk.moveDown = true;
+  int footfalls = 0;
+  const float dt = 1.0f / 60.0f;
+  for (int tick = 0; tick < 54; ++tick) { // 0.9 s: four whole 0.2 s frames
+    player.update(w, dt, walk);
+    renderer.update(dt, player);
+    footfalls += renderer.pollFootfall();
+  }
+  EXPECT_EQ(footfalls, 4);
+  EXPECT_FALSE(renderer.pollFootfall()) << "polling clears it";
 }

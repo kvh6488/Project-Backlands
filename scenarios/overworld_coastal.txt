@@ -1,0 +1,12 @@
+# Seed 1's coastal scrub on the north coast: a dune beach dithering into
+# meadow grass, sand patches inland, palms and short trees, and a river with
+# ordinary grassland and forest across it. Exercises the COASTAL biome and the
+# dune sand fade.
+seed 1
+world overworld
+window 1280 720
+scale 1.5
+spawn 2152 1000
+
+checkpoint scrub
+end

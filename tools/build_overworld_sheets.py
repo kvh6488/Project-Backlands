@@ -25,6 +25,10 @@ Outputs, all the renderer loads:
                   blue to the murk, then the murk itself. The renderer steps
                   through them away from open water
   ow_glints.png   a glint's three frames (a spark, a cross, a spark)
+  ow_steps.png    what feet leave (StepEffects): a snow boot print per
+                  facing, each again half filled in; then the wetland
+                  squish's four frames; then the sand kick's four frames.
+                  Drawn by hand in STEP_INK colours
   ow_river.png    flowing water: one 64px square that tiles with itself, which
                   the renderer scrolls downstream (dashes a little denser than
                   still water's, so the motion reads)
@@ -34,10 +38,11 @@ Outputs, all the renderer loads:
   ow_terrain.png  grass (the 16 corner tiles + fills), sand fills, and three
                   generated mud BANK rows: LightBorne's shapes grown 4 px into
                   the water, the lip a lake or river shows past the grass -
-                  plain mud, then a third and two thirds sand, for banks
-                  running into a beach
+                  plain mud, then four steps paler up the brown ramp to the
+                  sand's own tan, for banks running into a beach
   ow_fades.png    the FADE materials the renderer's shader draws: one row
-                  each (wetland, gravel, snow, snow drift) of 8 fills, then
+                  each (wetland, gravel, snow, snow drift, dune sand) of 8
+                  fills (the wetland's strewn with the swamp pack's blades), then
                   the material's two outline colours as pixels (x = 128,
                   129); a last row of LightBorne's 16 corner shapes coded
                   body / mid outline / dark outline, which the shader clips
@@ -144,13 +149,16 @@ MATERIALS = [
     ("sand",    [("beach", 1, 1), ("beach", 2, 1), ("beach", 1, 2), ("beach", 2, 2)]),  # fills only: the coast is its edge
 ]
 TERRAIN = ["grass", "sand"]  # ow_terrain.png rows, then the bank rows
-FADES = ["swamp", "wetland", "gravel", "snow", "drift"]  # ow_fades.png rows
+FADES = ["swamp", "wetland", "gravel", "snow", "drift", "dune"]  # ow_fades.png rows
 FADE_FILLS = 8
-# The bank rows' colours, mud first and then two steps toward the sand:
-# (lip, lip shadow, wet line at the waterline).
+# The bank rows' colours, mud first and then one brown-ramp step at a time
+# toward the sand (#d8b289 is the coast's own darker sand), one row per tile
+# nearer a beach: (lip, lip shadow, wet line at the waterline).
 BANK_STEPS = [("#7d4c2e", "#663b27", "#4a2a19"),
               ("#936340", "#7d4c2e", "#663b27"),
-              ("#cc9770", "#b17a4e", "#936340")]
+              ("#b17a4e", "#936340", "#7d4c2e"),
+              ("#cc9770", "#b17a4e", "#936340"),
+              ("#d8b289", "#cc9770", "#b17a4e")]
 FILL_COL = 16      # fills start here; columns 0-15 are the corner masks
 FILLS_PER_ROW = 4  # fewer fills repeat
 
@@ -256,7 +264,9 @@ PROPS = (
 )
 # Per-sprite recolours after quantizing. Pixel Crawler's broadleaf greens
 # are a lime that glows against every other tree: one step darker each.
+# High Tides' palm fronds quantize to the accent lime: same treatment.
 PROP_RECOLOUR = {f"PC1_S{s}_GREEN": {"#91ca51": "#69a754", "#69a754": "#55834c"} for s in (2, 3, 4, 5)}
+PROP_RECOLOUR.update({n: {"#95da41": "#69a754"} for n in ("PALM_TALL", "PALM_SHORT")})
 ATLAS_TILES = 40  # atlas width in tiles
 WATERLINE = 11    # art-px row of a prop's bottom tile the lapping water reaches
 # Props whose roots spread far enough over a river to lap (the widest, at
@@ -540,6 +550,8 @@ def material_fills(src, name):
         return swamp_fills()
     if name == "drift":
         return [recolour(f, DRIFT) for f in snow_fills()]
+    if name == "dune":
+        return material_fills(src, "sand")
     return [tile(src[s], c, r) for s, c, r in dict(MATERIALS)[name]]
 
 
@@ -562,6 +574,136 @@ def snow_fills():
                 f[y + 1, x + 1:x + n - 1, :3] = shadow
         out.append(f)
     return out
+
+
+def stamps(a, min_px=3):
+    """The 8-connected opaque blobs of `a` (at least min_px pixels), each
+    cropped to its bounds - loose sprites cut from a sheet region."""
+    seen = a[..., 3] == 0
+    out = []
+    for y0, x0 in zip(*np.nonzero(~seen)):
+        if seen[y0, x0]:
+            continue
+        stack, px = [(y0, x0)], []
+        seen[y0, x0] = True
+        while stack:
+            y, x = stack.pop()
+            px.append((y, x))
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    ny, nx = y + dy, x + dx
+                    if 0 <= ny < a.shape[0] and 0 <= nx < a.shape[1] and not seen[ny, nx]:
+                        seen[ny, nx] = True
+                        stack.append((ny, nx))
+        if len(px) < min_px:
+            continue
+        ys, xs = zip(*px)
+        s = np.zeros((max(ys) - min(ys) + 1, max(xs) - min(xs) + 1, 4), np.uint8)
+        for y, x in px:
+            s[y - min(ys), x - min(xs)] = a[y, x]
+        out.append(s)
+    return out
+
+
+def wetland_fills(src, base):
+    """Wetland: the swamp pack's flat green (`base`) with its loose blade
+    tufts (tilemap tiles 0-1 x 0-2) scattered over it, and small damp seeps -
+    a dark wet line with one lit pixel - so the ground reads soggy rather than
+    mown. The region's white flowers are left out: a white cross reads as a
+    water glint. Stamps stay 1 px off the edge, so any two fills tile."""
+    blades = [s for s in stamps(src["swamp"][0:3 * T, 0:2 * T])
+              if not match(s, hexrgb("#dfe3ed")).any()]
+    seep, lit = hexrgb("#48737c"), hexrgb("#91d6e8")
+    rng = np.random.default_rng(29)
+    out = []
+    for v in range(FADE_FILLS):
+        f = base.copy()
+        for _ in range(rng.integers(1, 3)):
+            s = blades[rng.integers(len(blades))]
+            h, w = s.shape[:2]
+            y, x = int(rng.integers(1, T - h)), int(rng.integers(1, T - w))
+            on = s[..., 3] > 0
+            f[y:y + h, x:x + w][on] = s[on]
+        if v % 2 == 0:  # half the fills hold a seep
+            x, y = int(rng.integers(2, T - 5)), int(rng.integers(2, T - 2))
+            n = int(rng.integers(2, 4))
+            f[y, x:x + n, :3] = seep
+            f[y, x + n - 1, :3] = lit
+        out.append(f)
+    return out
+
+
+# Step marks (ow_steps.png), drawn by hand: '.' clear, then palette colours
+# by letter. Each pattern is centred on its 16px tile's (8, 8), which the
+# renderer puts on the foot.
+STEP_INK = {"d": "#829da5", "s": "#a6b7c6",   # snow print: shadow, dip
+            "m": "#48737c", "w": "#4b8295",   # wetland squish: seep, water
+            "h": "#91d6e8", "o": "#dfe3ed",   # lit water, a droplet's glint
+            "g": "#b17a4e", "n": "#cc9770",   # sand kick: grain shadow, grain
+            "l": "#f6e998",                   # a grain catching the light
+            "G": "#d8b289", "N": "#e8d282"}   # the kick on scrub grass: pale sand
+# A boot print, sole and heel, toe toward the way walked: one per
+# FacingDirection in its enum order (down, up, left, right). The shadow sits
+# under each dent's top edge (light from above), the rest a dip a step
+# darker than the snow's own ripple shadows so it reads against them.
+PRINTS = [
+    [".d.", "...", "ddd", "sss", ".s."],   # down
+    [".d.", "dsd", "sss", "...", ".d."],   # up
+    [".dd.d", "sss.s", ".ss.."],           # left
+    ["d.dd.", "s.sss", "..ss."],           # right
+]
+
+
+def faint(rows):
+    """A print half filled in: shadow gone, every other pixel snowed over."""
+    return ["".join("." if c == "." or (x + y) % 2 else "s" for x, c in enumerate(r))
+            for y, r in enumerate(rows)]
+
+
+# The squish: water wells up round the boot, throws two droplets, spreads
+# into a ring and sinks back. Rows run from 5 px above the foot to 1 below.
+SQUISH = [
+    [".......", ".......", ".......", ".......", "..mwm..", ".mhwhm.", "..mmm.."],
+    [".......", ".......", ".o...o.", ".......", ".mwwwm.", "m.hhh.m", ".mmmmm."],
+    ["o.....o", ".......", ".h...h.", ".......", "mw...wm", "m.....m", ".m.m.m."],
+    [".......", ".......", ".......", "h.....h", "m.....m", ".......", "..m.m.."],
+]
+
+
+# The sand kick: grains spray up round the boot, peak, and patter back down.
+# Darker than any sand fill so they read on the beach, and on scrub grass.
+# Rows run from 5 px above the foot to 1 below, like the squish.
+KICK = [
+    [".......", ".......", ".......", "...n...", "..g.n..", ".n.g.g.", "..ggg.."],
+    [".......", "...l...", ".n...l.", "..g.n..", "g.....n", ".g.n.g.", "..g.g.."],
+    ["..l....", "l....n.", ".......", "n..g..g", ".......", "g.....g", ".g...g."],
+    [".......", ".......", ".......", ".n...l.", "g.....n", ".......", "g..g..g"],
+]
+
+
+def steps_sheet():
+    """Row 0: the four PRINTS; row 1: the same half filled in; row 2: the
+    SQUISH frames; row 3: the KICK frames; row 4: the kick in pale sand, for
+    scrub grass, where the dark grains read as dirt. One 16px tile each."""
+    a = np.zeros((5 * T, 4 * T, 4), np.uint8)
+
+    def stamp(rows, col, row, foot_row):
+        h, w = len(rows), len(rows[0])
+        y0, x0 = row * T + 8 - foot_row, col * T + 8 - w // 2
+        for y, line in enumerate(rows):
+            for x, ch in enumerate(line):
+                if ch != ".":
+                    a[y0 + y, x0 + x] = (*hexrgb(STEP_INK[ch]), 255)
+
+    for i, p in enumerate(PRINTS):
+        stamp(p, i, 0, len(p) // 2)
+        stamp(faint(p), i, 1, len(p) // 2)
+    for i, f in enumerate(SQUISH):
+        stamp(f, i, 2, 5)  # the ring's middle row on the foot
+    for i, f in enumerate(KICK):
+        stamp(f, i, 3, 5)
+        stamp([r.replace("g", "G").replace("n", "N") for r in f], i, 4, 5)
+    return a
 
 
 def outline_shades(fill, pal):
@@ -625,9 +767,16 @@ def fades_sheet(src, pal):
         if name == "swamp":
             continue
         fills = material_fills(src, name)
+        dark, mid = outline_shades(fills[0], pal)  # off the plain fill, before any texture
+        if name == "dune":
+            # The beach's own sand: where dunes cover the grass's edge, the
+            # outline vanishes instead of drawing a line through the sand.
+            colours, counts = np.unique(fills[0].reshape(-1, 4)[:, :3], axis=0, return_counts=True)
+            dark = mid = tuple(int(v) for v in colours[np.argmax(counts)])
+        if name == "wetland":
+            fills = wetland_fills(src, fills[0])
         for i in range(FADE_FILLS):
             a[k * T:(k + 1) * T, i * T:(i + 1) * T] = fills[i % len(fills)]
-        dark, mid = outline_shades(fills[0], pal)
         a[k * T, 8 * T] = (*dark, 255)
         a[k * T, 8 * T + 1] = (*mid, 255)
     y0 = len(FADES) * T
@@ -847,6 +996,7 @@ def main():
     save(river_sheet(), os.path.join(assets, "ow_river.png"))
     save(swamp_water_sheet(), os.path.join(assets, "ow_swamp_water.png"))
     save(glints_sheet(), os.path.join(assets, "ow_glints.png"))
+    save(steps_sheet(), os.path.join(assets, "ow_steps.png"))
     save(src["coast"], os.path.join(assets, "ow_coast.png"))
     save(terrain_sheet(src, pal), os.path.join(assets, "ow_terrain.png"))
     save(shades_sheet(src, pal), os.path.join(assets, "ow_shades.png"))

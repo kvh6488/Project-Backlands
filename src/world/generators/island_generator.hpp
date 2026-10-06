@@ -32,6 +32,9 @@ struct IslandMap {
   std::vector<float> oceanDist; // coarse cells to the nearest ocean cell
   std::vector<uint8_t> swampRiver; // river cells near a swamp lake: swamp water
   std::vector<float> swampDist; // coarse cells to the nearest swamp water
+  std::vector<float> openLakeDist; // coarse cells to the nearest open (non-swamp) lake
+  std::vector<uint8_t> coastalShore; // shoreline cells chosen for coastal scrub
+  std::vector<float> coastalDist;  // coarse cells to the nearest chosen shoreline cell
 
   // Per lake id.
   std::vector<float> lakeLevel; // water surface: the depression's spill height
@@ -92,13 +95,28 @@ struct IslandMap {
 //               inland (at least one per island) become swamps. So does any
 //               lake in that band most of whose shore
 //               lies in a swamp's wet halo, repeated until none joins - so
-//               swamps come as regions, and no open lake sits in a marsh. Then
+//               swamps come as regions. An open lake left over (outside the
+//               band, or in a marsh hollow) gets dry banks instead: see
+//               kOpenLakeDry. Then
 //               every river cell within kSwampRiverReach steps of a swamp
 //               lake along the flow, up- or downstream.  O(N * passes + reach)
 //   9. Distance Euclidean distance to the nearest water (moisture bonus),
 //               ocean (beach width, and the swamp band - so this runs before
-//               step 8) and swamp water (the wetland around a swamp), by
-//               nearest-source propagation.                         ~O(N)
+//               step 8), swamp water (the wetland around a swamp) and open
+//               lake (its dry banks), by nearest-source propagation.  ~O(N)
+//  10. Coast    Which shores grow coastal scrub. Every land cell beside the
+//               sea scores its SHELTER: 0.5 minus the share of ocean in the
+//               squares around it (two radii, summed-area tables) - about 0
+//               on a straight coast, positive at the back of a bay, where
+//               land wraps round on both sides, negative on a headland. A
+//               shore of an outlying island (any land mass but the largest,
+//               by BFS) scores as the mainland's kIslandRank-th shelter
+//               instead, since an island is all headland. Broad noise is added so the picks run in
+//               natural stretches, and the top kCoastalShare of shore cells
+//               by score are chosen - a quantile, so every seed gets the
+//               same share (~30 % of the coastline once the zone spreads).
+//               Island::sample turns grassland and forest within
+//               kCoastalReach of a chosen cell into COASTAL.          O(N)
 //
 // N = n^2 coarse cells. ~150k at the default size, well under a second.
 // ============================================================================
@@ -123,6 +141,25 @@ inline constexpr int kSwampRiverReach = 6; // coarse cells (~48 tiles)
 // (or a below-sea marsh), so a plain lake gets grass or forest banks.
 inline constexpr float kWaterWet = 0.35f, kWaterSpread = 3.0f; // ~24 tiles
 inline constexpr float kSwampWet = 0.55f, kSwampSpread = 4.0f; // ~32 tiles
+// Within this many coarse cells of an open lake no land is wetland - neither
+// swamp halo nor below-sea marsh - so a lake the swamp band did not take
+// never sits in a marsh. Reaches ~1 cell past the farthest lake tile.
+inline constexpr float kOpenLakeDry = 2.5f; // ~20 tiles
+
+// Coastal scrub (step 10). Radii in coarse cells: ~100 and ~200 tiles, so a
+// cove and a whole bay both read as sheltered.
+// The share of shore cells chosen. The zone also spreads sideways along the
+// shore from each pick, so 15 % chosen covers ~30 % of the coastline
+// (measured over seeds 1-5: 30-34 %).
+inline constexpr float kCoastalShare = 0.15f;
+inline constexpr int kShelterRadiusNear = 12, kShelterRadiusFar = 24;
+// An outlying island's shore scores like the mainland's shelter at this
+// rank: favoured, but still competing with the noise.
+inline constexpr float kIslandRank = 0.90f;
+inline constexpr float kShelterNoise = 0.08f;
+// How far the zone reaches from a chosen shore cell's centre, plus the
+// wobble times gradient noise (+-0.71): ~30-45 tiles of scrub behind the beach.
+inline constexpr float kCoastalReach = 5.75f, kCoastalWobble = 1.6f;
 inline float landMoisture(float noise, float waterDist, float swampDist) {
   const float plain = noise + kWaterWet * std::exp(-waterDist / kWaterSpread);
   return std::min(plain, biome::kWetlandMoisture - 0.01f) +

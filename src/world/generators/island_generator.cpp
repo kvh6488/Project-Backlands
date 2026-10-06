@@ -378,6 +378,92 @@ void chooseSwamps(IslandMap &m, const TerrainField &field, uint32_t seed) {
   }
 }
 
+void chooseCoastal(IslandMap &m, uint32_t seed) {
+  const int n = m.n, N = n * n;
+  m.coastalShore.assign(N, 0);
+
+  // Summed-area table of ocean cells. Boxes clamp at the grid edge rather
+  // than wrap: the margin there is all open sea, far from any shore.
+  const int sw = n + 1;
+  std::vector<int> sum((size_t)sw * sw, 0);
+  for (int y = 0; y < n; ++y)
+    for (int x = 0; x < n; ++x) {
+      const int a = (y + 1) * sw + x + 1;
+      sum[a] = m.ocean[y * n + x] + sum[a - 1] + sum[a - sw] - sum[a - sw - 1];
+    }
+  auto oceanShare = [&](int x, int y, int r) {
+    const int xa = std::max(0, x - r), xb = std::min(n, x + r + 1);
+    const int ya = std::max(0, y - r), yb = std::min(n, y + r + 1);
+    const int s = sum[yb * sw + xb] - sum[ya * sw + xb] - sum[yb * sw + xa] + sum[ya * sw + xa];
+    return (float)s / (float)((xb - xa) * (yb - ya));
+  };
+
+  // Land masses (8-connected, lakes included): the largest is the island.
+  std::vector<int> mass(N, -1), massSize;
+  for (int start = 0; start < N; ++start) {
+    if (m.ocean[start] || mass[start] >= 0)
+      continue;
+    const int id = (int)massSize.size();
+    int size = 0;
+    std::deque<int> q{start};
+    mass[start] = id;
+    while (!q.empty()) {
+      const int c = q.front();
+      q.pop_front();
+      ++size;
+      for (int d = 0; d < 8; ++d) {
+        const int nb = m.index(c % n + kDX[d], c / n + kDY[d]);
+        if (!m.ocean[nb] && mass[nb] < 0) {
+          mass[nb] = id;
+          q.push_back(nb);
+        }
+      }
+    }
+    massSize.push_back(size);
+  }
+  if (massSize.empty())
+    return;
+  const int mainland = (int)(std::max_element(massSize.begin(), massSize.end()) - massSize.begin());
+
+  // The value at share q of the way up `v`: nth_element, O(size).
+  auto quantile = [](std::vector<float> v, float q) {
+    if (v.empty())
+      return 0.0f;
+    const size_t at = std::min(v.size() - 1, (size_t)(q * (float)v.size()));
+    std::nth_element(v.begin(), v.begin() + at, v.end());
+    return v[at];
+  };
+
+  std::vector<int> shore;
+  std::vector<float> score(N, 0.0f), mainlandShelter;
+  for (int c = 0; c < N; ++c) {
+    if (m.ocean[c] || m.lake[c] >= 0 || m.oceanDist[c] > 1.5f)
+      continue;
+    shore.push_back(c);
+    if (mass[c] != mainland)
+      continue;
+    const int x = c % n, y = c / n;
+    score[c] = 0.5f - 0.5f * (oceanShare(x, y, island::kShelterRadiusNear) +
+                              oceanShare(x, y, island::kShelterRadiusFar));
+    mainlandShelter.push_back(score[c]);
+  }
+  if (shore.empty())
+    return;
+  // Relative to this seed's bays, so islands fare the same on every seed.
+  const float islandShelter = quantile(mainlandShelter, island::kIslandRank);
+  std::vector<float> ranked;
+  ranked.reserve(shore.size());
+  for (int c : shore) {
+    if (mass[c] != mainland)
+      score[c] = islandShelter;
+    score[c] += island::kShelterNoise * noise::gradient((c % n) / 16.0f, (c / n) / 16.0f, seed);
+    ranked.push_back(score[c]);
+  }
+  const float threshold = quantile(std::move(ranked), 1.0f - island::kCoastalShare);
+  for (int c : shore)
+    m.coastalShore[c] = score[c] >= threshold;
+}
+
 } // namespace
 
 IslandMap buildIslandMap(const TerrainField &field, const IslandConfig &cfg,
@@ -410,5 +496,8 @@ IslandMap buildIslandMap(const TerrainField &field, const IslandConfig &cfg,
   m.swampDist = distanceFrom(m, [&](int c) {
     return m.swampRiver[c] || (m.lake[c] >= 0 && m.lakeSwamp[m.lake[c]]);
   });
+  m.openLakeDist = distanceFrom(m, [&](int c) { return m.lake[c] >= 0 && !m.lakeSwamp[m.lake[c]]; });
+  chooseCoastal(m, noise::hash(8, 0, seed));
+  m.coastalDist = distanceFrom(m, [&](int c) { return m.coastalShore[c] != 0; });
   return m;
 }

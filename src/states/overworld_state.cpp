@@ -46,6 +46,7 @@ void OverworldState::onEnter() {
   m_itemRenderer.loadTextures();
   m_playerRenderer.loadTextures();
   m_renderer.loadTextures();
+  m_stepEffects.loadTextures();
   placePlayer();
   updateCamera();
   m_screenTarget = LoadRenderTexture(m_canvas.width, m_canvas.height);
@@ -112,6 +113,7 @@ void OverworldState::update(float dt, const InputState &in) {
                   !m_uiManager.isInventoryOpen() &&
                       !m_uiManager.isFullscreenMapOpen());
   m_playerRenderer.update(dt, m_player);
+  m_stepEffects.update(m_world, m_player, m_playerRenderer.pollFootfall(), dt);
   updateCamera();
 
   // Chunks follow the camera; everything further out is regenerated on
@@ -162,6 +164,7 @@ void OverworldState::render(const InputState &in) {
   ClearBackground(theme::ocean);
   BeginMode2D(m_camera);
   m_renderer.renderTerrain(m_world, m_camera, m_canvas, m_totalTime);
+  m_stepEffects.drawFlat();
 
   ViewBounds view = ViewBounds::fromCamera(m_world, m_camera, m_canvas);
   // Props rooted below the screen still reach up into it.
@@ -169,6 +172,7 @@ void OverworldState::render(const InputState &in) {
                     view.maxBaseY(grid::CELL) +
                         OverworldRenderer::kReachBelowTiles * grid::CELL);
   m_playerRenderer.collect(m_player, m_drawQueue);
+  m_stepEffects.collect(m_drawQueue);
   m_itemRenderer.collect(m_world, m_camera, m_canvas, AreaState::ROOM,
                          m_drawQueue);
   m_renderer.setFocus(m_player.getPosition());
