@@ -176,6 +176,7 @@ void traceRivers(IslandMap &m, uint32_t seed) {
     }
     s.halfWidth = std::min(
         3.4f, 0.9f + 0.55f * std::log2(m.flow[c] / island::kRiverFlow + 1.0f));
+    s.cell = c;
     int id = (int)m.segments.size();
     m.segments.push_back(s);
     perCell[c].push_back(id);
@@ -192,17 +193,19 @@ void traceRivers(IslandMap &m, uint32_t seed) {
 
 // Euclidean, not step-counted: a plain BFS measures Chebyshev distance, whose
 // contours are squares, and the moisture bonus then paints square forests.
-// Each cell instead inherits its neighbour's nearest water cell and measures
+// Each cell instead inherits its neighbour's nearest source cell and measures
 // the true distance to it, re-queueing whenever that improves - nearest-
 // source propagation, a close approximation of the exact Euclidean distance
 // transform (Danielsson 1980).
-void measureWaterDistance(IslandMap &m) {
+template <typename IsSource>
+std::vector<float> distanceFrom(const IslandMap &m, IsSource isSource) {
   const int N = m.n * m.n;
+  std::vector<float> dist(N, 1e9f);
   std::vector<int> source(N, -1);
   std::deque<int> q;
   for (int c = 0; c < N; ++c) {
-    if (m.ocean[c] || m.lake[c] >= 0 || m.river[c]) {
-      m.waterDist[c] = 0.0f;
+    if (isSource(c)) {
+      dist[c] = 0.0f;
       source[c] = c;
       q.push_back(c);
     }
@@ -219,11 +222,76 @@ void measureWaterDistance(IslandMap &m) {
     int x = c % m.n, y = c / m.n;
     for (int d = 0; d < 8; ++d) {
       int nb = m.index(x + kDX[d], y + kDY[d]);
-      float dist = torusDist(nb, source[c]);
-      if (dist < m.waterDist[nb] - 1e-4f) {
-        m.waterDist[nb] = dist;
+      float dd = torusDist(nb, source[c]);
+      if (dd < dist[nb] - 1e-4f) {
+        dist[nb] = dd;
         source[nb] = source[c];
         q.push_back(nb);
+      }
+    }
+  }
+  return dist;
+}
+
+void chooseSwamps(IslandMap &m, const TerrainField &field, uint32_t seed) {
+  const int N = m.n * m.n;
+  const int lakes = (int)m.lakeLevel.size();
+  const float k = (float)IslandConfig::kCoarse;
+  m.lakeSwamp.assign(lakes, 0);
+  m.swampRiver.assign(N, 0);
+  if (lakes == 0)
+    return;
+
+  // Mean temperature over each lake's cells, at its water level.
+  std::vector<float> temp(lakes, 0.0f);
+  std::vector<int> cells(lakes, 0);
+  for (int c = 0; c < N; ++c) {
+    int id = m.lake[c];
+    if (id < 0)
+      continue;
+    temp[id] += field.temperature((c % m.n + 0.5f) * k, (c / m.n + 0.5f) * k,
+                                  m.lakeLevel[id]);
+    cells[id]++;
+  }
+  int fallback = -1; // the warmest lake, in case no roll succeeds
+  for (int id = 0; id < lakes; ++id) {
+    temp[id] /= cells[id];
+    if (fallback < 0 || temp[id] > temp[fallback])
+      fallback = id;
+  }
+  bool any = false;
+  for (int id = 0; id < lakes; ++id) {
+    if (temp[id] >= island::kSwampMinTemperature &&
+        noise::unit(id, 0, seed) < island::kSwampChance) {
+      m.lakeSwamp[id] = 1;
+      any = true;
+    }
+  }
+  if (!any)
+    m.lakeSwamp[fallback] = 1;
+
+  auto inSwampLake = [&](int c) { return m.lake[c] >= 0 && m.lakeSwamp[m.lake[c]]; };
+  for (int c = 0; c < N; ++c) {
+    // Upstream: a river cell that reaches a swamp lake within the reach.
+    if (m.river[c]) {
+      int r = c;
+      for (int step = 0; step < island::kSwampRiverReach && r >= 0; ++step) {
+        r = m.receiver[r];
+        if (r >= 0 && inSwampLake(r)) {
+          m.swampRiver[c] = 1;
+          break;
+        }
+        if (r < 0 || !m.river[r])
+          break;
+      }
+    }
+    // Downstream: the run of river leaving a swamp lake's outlet.
+    if (inSwampLake(c) && m.receiver[c] >= 0 && m.lake[m.receiver[c]] != m.lake[c]) {
+      int r = m.receiver[c];
+      for (int step = 0; step < island::kSwampRiverReach && r >= 0 && m.river[r];
+           ++step) {
+        m.swampRiver[r] = 1;
+        r = m.receiver[r];
       }
     }
   }
@@ -243,7 +311,6 @@ IslandMap buildIslandMap(const TerrainField &field, const IslandConfig &cfg,
   m.receiver.assign(N, -1);
   m.flow.assign(N, 0.0f);
   m.river.assign(N, 0);
-  m.waterDist.assign(N, 1e9f);
 
   const float k = (float)IslandConfig::kCoarse;
   for (int y = 0; y < m.n; ++y)
@@ -255,6 +322,12 @@ IslandMap buildIslandMap(const TerrainField &field, const IslandConfig &cfg,
   findLakes(m);
   drain(m);
   traceRivers(m, noise::hash(6, 0, seed));
-  measureWaterDistance(m);
+  chooseSwamps(m, field, noise::hash(7, 0, seed));
+  m.waterDist = distanceFrom(
+      m, [&](int c) { return m.ocean[c] || m.lake[c] >= 0 || m.river[c]; });
+  m.oceanDist = distanceFrom(m, [&](int c) { return m.ocean[c] != 0; });
+  m.swampDist = distanceFrom(m, [&](int c) {
+    return m.swampRiver[c] || (m.lake[c] >= 0 && m.lakeSwamp[m.lake[c]]);
+  });
   return m;
 }

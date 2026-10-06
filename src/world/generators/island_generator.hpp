@@ -26,10 +26,14 @@ struct IslandMap {
   std::vector<float> flow;     // cells of land draining through here (incl. itself)
   std::vector<uint8_t> river;
   std::vector<float> waterDist; // coarse cells to the nearest ocean/lake/river
+  std::vector<float> oceanDist; // coarse cells to the nearest ocean cell
+  std::vector<uint8_t> swampRiver; // river cells near a swamp lake: swamp water
+  std::vector<float> swampDist; // coarse cells to the nearest swamp water
 
   // Per lake id.
   std::vector<float> lakeLevel; // water surface: the depression's spill height
   std::vector<int> lakeInflow;  // river cells flowing straight in; 0 = a lone lake
+  std::vector<uint8_t> lakeSwamp; // the lake is a swamp
 
   // A river reach: a straight run from one cell's node to its receiver's, in
   // tile coordinates. Indexed per coarse cell in CSR form (segStart/segIds),
@@ -37,6 +41,7 @@ struct IslandMap {
   struct Segment {
     float ax, ay, bx, by;
     float halfWidth; // tiles
+    int cell;        // the upstream cell the reach leaves from
   };
   std::vector<Segment> segments;
   std::vector<int> segStart; // n*n + 1 offsets into segIds
@@ -77,8 +82,13 @@ struct IslandMap {
 //               where two meet they merge. A river into a lake continues
 //               from the lake's outlet, because the lake's whole inflow
 //               leaves through it.                                     O(N)
-//   8. Distance Euclidean distance to the nearest water, by nearest-source
-//               propagation, for the moisture bonus.               ~O(N)
+//   8. Swamps   About 1 in 3 of the low, warm lakes (at least one per
+//               island) become swamps, and so does every river cell within
+//               kSwampRiverReach steps of one along the flow, up- or
+//               downstream.                                     O(N * reach)
+//   9. Distance Euclidean distance to the nearest water (moisture bonus),
+//               ocean (beach width) and swamp water (the wetland around a
+//               swamp), by nearest-source propagation.             ~O(N)
 //
 // N = n^2 coarse cells. ~150k at the default size, well under a second.
 // ============================================================================
@@ -89,4 +99,7 @@ namespace island {
 inline constexpr int kMinLakeCells = 3;
 inline constexpr float kRiverFlow = 160.0f; // ~10k tiles of catchment
 inline constexpr float kPitDepth = 0.002f;  // fill below this is a flat, not a pit
+inline constexpr float kSwampMinTemperature = 0.55f; // warm lowland lakes only
+inline constexpr float kSwampChance = 0.35f;
+inline constexpr int kSwampRiverReach = 6; // coarse cells (~48 tiles)
 } // namespace island

@@ -22,6 +22,7 @@ enum class Biome : uint8_t {
   OCEAN,
   LAKE,
   RIVER,
+  SWAMP, // swamp water: a swamp lake and the rivers near it
   BEACH,
   GRASSLAND,
   FOREST,
@@ -32,7 +33,8 @@ enum class Biome : uint8_t {
 };
 
 inline bool isWater(Biome b) {
-  return b == Biome::OCEAN || b == Biome::LAKE || b == Biome::RIVER;
+  return b == Biome::OCEAN || b == Biome::LAKE || b == Biome::RIVER ||
+         b == Biome::SWAMP;
 }
 
 inline const char *biomeId(Biome b) {
@@ -40,6 +42,7 @@ inline const char *biomeId(Biome b) {
   case Biome::OCEAN: return "OCEAN";
   case Biome::LAKE: return "LAKE";
   case Biome::RIVER: return "RIVER";
+  case Biome::SWAMP: return "SWAMP";
   case Biome::BEACH: return "BEACH";
   case Biome::GRASSLAND: return "GRASSLAND";
   case Biome::FOREST: return "FOREST";
@@ -71,11 +74,11 @@ inline Biome whittaker(float temperature, float moisture) {
   return kWhittaker[t][m];
 }
 
-// Dry land only. coastal = an ocean coarse cell is close by, so a low tile
-// here is a beach rather than a lakeshore.
+// Dry land only. nearOcean = within beach width of the open sea, so a low
+// tile here is a beach rather than a lakeshore.
 inline Biome classifyLand(float height, float temperature, float moisture,
-                          bool coastal) {
-  if (coastal && height < kBeachTop)
+                          bool nearOcean) {
+  if (nearOcean && height < kBeachTop)
     return Biome::BEACH;
   if (temperature < kSnowTemperature)
     return Biome::SNOW;

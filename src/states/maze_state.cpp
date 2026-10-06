@@ -266,6 +266,21 @@ void MazeState::update(float dt, const InputState &in) {
     attemptMagicBookSpawn();
   }
 
+  // Debug: minimap click. Walls snap to the nearest floor; the area follows
+  // the cell, as with the --spawn override.
+  if (m_debugOverlay.triggerTeleport()) {
+    m_debugOverlay.clearTeleport();
+    int tx = m_debugOverlay.teleportX(), ty = m_debugOverlay.teleportY();
+    if (m_maze.nearestOpenCell(tx, ty, 16)) {
+      const float cell = (float)m_maze.getCellSize();
+      m_player.teleport({tx * cell + cell / 2.0f, ty * cell + cell / 2.0f},
+                        m_maze.getCell(tx, ty) == Maze::CELL_CORRIDOR
+                            ? AreaState::CORRIDOR
+                            : AreaState::ROOM);
+      debuglog::log("DEV", "teleported to (%d, %d)", tx, ty);
+    }
+  }
+
   // --- Debug trip controls ---
   if (m_debugOverlay.triggerForceTrip()) {
     m_debugOverlay.clearForceTrip();

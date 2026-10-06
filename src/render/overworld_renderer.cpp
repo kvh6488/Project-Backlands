@@ -160,6 +160,7 @@ Color OverworldRenderer::biomeColour(Biome b) {
   case Biome::OCEAN: return theme::ocean;
   case Biome::LAKE: return theme::lake;
   case Biome::RIVER: return theme::river;
+  case Biome::SWAMP: return theme::swamp;
   case Biome::BEACH: return theme::beach;
   case Biome::GRASSLAND: return theme::grassland;
   case Biome::FOREST: return theme::forest;

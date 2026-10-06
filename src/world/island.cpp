@@ -8,12 +8,13 @@ Island::Island(uint32_t seed, const IslandConfig &cfg)
   chooseSpawn();
 }
 
-float Island::waterDistAt(float tx, float ty) const {
+// Bilinear between the four nearest cell centres, so a distance field's
+// contours are smooth curves instead of 8-tile steps.
+float Island::distAt(const std::vector<float> &d, float tx, float ty) const {
   const float k = (float)IslandConfig::kCoarse;
   float gx = tx / k - 0.5f, gy = ty / k - 0.5f;
   int x0 = (int)std::floor(gx), y0 = (int)std::floor(gy);
   float fx = gx - x0, fy = gy - y0;
-  const auto &d = m_map.waterDist;
   float a = d[m_map.index(x0, y0)], b = d[m_map.index(x0 + 1, y0)];
   float c = d[m_map.index(x0, y0 + 1)], e = d[m_map.index(x0 + 1, y0 + 1)];
   float top = a + (b - a) * fx, bottom = c + (e - c) * fx;
@@ -40,12 +41,11 @@ TileSample Island::sample(int x, int y) const {
   out.height = m_field.height(px, py);
 
   const int cx = x / IslandConfig::kCoarse, cy = y / IslandConfig::kCoarse;
-  bool coastal = false;
-  for (int dy = -1; dy <= 1; ++dy)
-    for (int dx = -1; dx <= 1; ++dx)
-      coastal = coastal || m_map.ocean[m_map.index(cx + dx, cy + dy)];
+  // A smooth field, not "any ocean cell in the 3x3 block": that yes/no answer
+  // changed only at coarse-cell borders and cut beaches into 8-tile squares.
+  const float oceanDist = distAt(m_map.oceanDist, px, py);
 
-  if (out.height < 0.0f && coastal) {
+  if (out.height < 0.0f && oceanDist < kOceanReach) {
     out.biome = Biome::OCEAN;
     return out;
   }
@@ -62,7 +62,7 @@ TileSample Island::sample(int x, int y) const {
       float ox = gx - (cx + dx + 0.5f), oy = gy - (cy + dy + 0.5f);
       float sag = 0.06f * std::max(0.0f, std::sqrt(ox * ox + oy * oy) - 0.6f);
       if (out.height < m_map.lakeLevel[lake] - sag) {
-        out.biome = Biome::LAKE;
+        out.biome = m_map.lakeSwamp[lake] ? Biome::SWAMP : Biome::LAKE;
         return out;
       }
     }
@@ -81,7 +81,7 @@ TileSample Island::sample(int x, int y) const {
       for (int i = m_map.segStart[c]; i < m_map.segStart[c + 1]; ++i) {
         const IslandMap::Segment &s = m_map.segments[m_map.segIds[i]];
         if (distToSegment(px, py, s) < s.halfWidth * wobble) {
-          out.biome = Biome::RIVER;
+          out.biome = m_map.swampRiver[s.cell] ? Biome::SWAMP : Biome::RIVER;
           return out;
         }
       }
@@ -89,11 +89,19 @@ TileSample Island::sample(int x, int y) const {
   }
 
   out.temperature = m_field.temperature(px, py, out.height);
-  // Up to +0.35 at the water's edge, fading over ~3 coarse cells (24 tiles).
+  // Up to +0.35 at the water's edge, fading over ~3 coarse cells (24 tiles),
+  // and a wider, wetter halo round swamp water that grows the wetland.
   out.moisture = m_field.moistureNoise(px, py) +
-                 0.35f * std::exp(-waterDistAt(px, py) / 3.0f);
-  out.biome =
-      biome::classifyLand(out.height, out.temperature, out.moisture, coastal);
+                 0.35f * std::exp(-distAt(m_map.waterDist, px, py) / 3.0f) +
+                 kSwampWet * std::exp(-distAt(m_map.swampDist, px, py) /
+                                      kSwampSpread);
+  // Beach width wobbles along the coast, measured from ocean cell centres.
+  // Two octaves: the bilinear field alone leaves straight runs inside a cell.
+  float beachReach =
+      kBeachReach + 0.5f * noise::gradient(px / 40.0f, py / 40.0f, m_seed ^ 0xbeac4u) +
+      0.25f * noise::gradient(px / 11.0f, py / 11.0f, m_seed ^ 0x5a4d1u);
+  out.biome = biome::classifyLand(out.height, out.temperature, out.moisture,
+                                  oceanDist < beachReach);
   return out;
 }
 

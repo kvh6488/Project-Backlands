@@ -32,6 +32,19 @@ bool wideButton(const char *label) {
   return ImGui::Button(label, ImVec2(-FLT_MIN, 0.0f));
 }
 
+// The tile under the mouse on a map image just drawn (the last ImGui item),
+// with a hover tooltip. True on a left click.
+bool pickTile(ImVec2 mapPos, ImVec2 mapSize, int worldW, int worldH, int &tx,
+              int &ty) {
+  if (!ImGui::IsItemHovered())
+    return false;
+  ImVec2 m = ImGui::GetMousePos();
+  tx = std::clamp((int)((m.x - mapPos.x) / mapSize.x * worldW), 0, worldW - 1);
+  ty = std::clamp((int)((m.y - mapPos.y) / mapSize.y * worldH), 0, worldH - 1);
+  ImGui::SetTooltip("(%d, %d)  click to teleport", tx, ty);
+  return ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+}
+
 } // namespace
 
 DebugOverlay::DebugOverlay(bool devToolsAvailable)
@@ -346,6 +359,10 @@ void DebugOverlay::drawMinimapSection(Player &player, Maze &maze) {
   rlImGuiImageRect(&m_mapTexture.texture, (int)mapSize.x, (int)mapSize.y,
                    Rectangle{0, 0, (float)m_mapTexture.texture.width,
                              -(float)m_mapTexture.texture.height});
+  int tx, ty;
+  if (pickTile(mapPos, ImVec2(mapSize.x, mapSize.y), maze.getWidth(),
+               maze.getHeight(), tx, ty))
+    requestTeleport(tx, ty);
 
   // Player marker. The maze wraps toroidally, so the raw grid position is
   // wrapped before it becomes a fraction of the map.
@@ -366,6 +383,7 @@ void DebugOverlay::drawMinimapSection(Player &player, Maze &maze) {
   draw->AddCircle(marker, 6.0f, IM_COL32(255, 60, 60, 120));
 
   ImGui::TextDisabled("red you / green radiation / blue waste / purple book");
+  ImGui::TextDisabled("click to teleport");
 
   ImGui::Unindent();
   ImGui::Spacing();
@@ -439,6 +457,10 @@ void DebugOverlay::drawIslandMapSection(Player &player, Overworld &world) {
   rlImGuiImageRect(&m_islandTexture, (int)side, (int)side,
                    Rectangle{0, 0, (float)m_islandTexture.width,
                              (float)m_islandTexture.height});
+  int tx, ty;
+  if (pickTile(mapPos, ImVec2(side, side), world.getWidth(), world.getHeight(),
+               tx, ty))
+    requestTeleport(tx, ty);
 
   int px = world.wrapX(world.toGridX(player.getPosition().x));
   int py = world.wrapY(world.toGridY(player.getPosition().y));
@@ -450,7 +472,7 @@ void DebugOverlay::drawIslandMapSection(Player &player, Overworld &world) {
   draw->AddCircleFilled(marker, 3.5f, IM_COL32(255, 60, 60, 255));
   draw->AddCircle(marker, 6.0f, IM_COL32(255, 60, 60, 120));
 
-  ImGui::TextDisabled("one pixel = 8x8 tiles; red is you");
+  ImGui::TextDisabled("one pixel = 8x8 tiles; red is you; click to teleport");
 
   ImGui::Unindent();
   ImGui::Spacing();

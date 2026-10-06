@@ -134,6 +134,50 @@ TEST(IslandTest, LoneLakesAndFedLakesBothExist) {
   EXPECT_GT(fed, 0);
 }
 
+TEST(IslandTest, SwampWaterIsASwampLakeAndTheRiversBesideIt) {
+  const IslandMap &m = sharedWorld().island().map();
+  int swampLakes = 0;
+  for (uint8_t s : m.lakeSwamp)
+    swampLakes += s;
+  EXPECT_GT(swampLakes, 0);
+  EXPECT_LT(swampLakes, (int)m.lakeSwamp.size()); // a fraction, not all
+
+  // A swamp river cell is a river within the reach of a swamp lake, along the
+  // flow in one direction or the other.
+  auto swampLake = [&](int c) { return m.lake[c] >= 0 && m.lakeSwamp[m.lake[c]]; };
+  const int N = m.n * m.n;
+  for (int c = 0; c < N; ++c) {
+    if (!m.swampRiver[c])
+      continue;
+    ASSERT_TRUE(m.river[c]);
+    bool near = false;
+    for (int r = c, s = 0; r >= 0 && s <= island::kSwampRiverReach && !near; ++s) {
+      near = swampLake(r);
+      r = m.receiver[r];
+    }
+    // Downstream of the outlet: walk up through swamp river cells instead.
+    for (int u = 0; u < N && !near; ++u)
+      near = m.receiver[u] == c && (swampLake(u) || m.swampRiver[u]);
+    EXPECT_TRUE(near) << "cell " << c;
+  }
+}
+
+TEST(IslandTest, BeachesHugTheOcean) {
+  // Beach is capped by distance to the open sea, so no tile of it lies more
+  // than the widest reach (in coarse cells) from an ocean cell.
+  const Island &isl = sharedWorld().island();
+  const IslandMap &m = isl.map();
+  const int k = IslandConfig::kCoarse;
+  for (int y = 0; y < isl.config().size; y += 7) {
+    for (int x = 0; x < isl.config().size; x += 7) {
+      if (isl.sample(x, y).biome == Biome::BEACH) {
+        ASSERT_LT(m.oceanDist[m.index(x / k, y / k)], Island::kBeachReach + 2.0f)
+            << x << "," << y;
+      }
+    }
+  }
+}
+
 TEST(IslandTest, TheWrapSeamLiesInOpenOcean) {
   const Island &isl = sharedWorld().island();
   const int size = isl.config().size;

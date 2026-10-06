@@ -94,6 +94,19 @@ void OverworldState::update(float dt, const InputState &in) {
     }
   }
 
+  // Minimap click; a tree or rock tile snaps to the nearest open one.
+  if (m_debugOverlay.triggerTeleport()) {
+    m_debugOverlay.clearTeleport();
+    int tx = m_debugOverlay.teleportX(), ty = m_debugOverlay.teleportY();
+    if (m_world.nearestOpenCell(tx, ty, 8)) {
+      const float cell = (float)grid::CELL;
+      m_player.teleport({tx * cell + cell / 2.0f, ty * cell + cell / 2.0f},
+                        AreaState::ROOM);
+      debuglog::log("DEV", "teleported to (%d, %d) %s", tx, ty,
+                    biomeId(m_world.biomeAt(tx, ty)));
+    }
+  }
+
   handleInput(in);
   m_player.update(m_world, dt, in,
                   !m_uiManager.isInventoryOpen() &&

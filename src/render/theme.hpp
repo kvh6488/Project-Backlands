@@ -32,6 +32,7 @@ inline constexpr Color radiationGlow = pal::accent[5];  // barrel halos, additiv
 inline constexpr Color ocean = pal::blue[0];
 inline constexpr Color lake = pal::blue[3];
 inline constexpr Color river = pal::blue[4];
+inline constexpr Color swamp = pal::grey[4];
 inline constexpr Color beach = pal::yellow[9];
 inline constexpr Color grassland = pal::green[9];
 inline constexpr Color forest = pal::green[5];

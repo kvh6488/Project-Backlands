@@ -80,6 +80,13 @@ public:
   bool triggerRemoveProp() const { return m_triggerRemoveProp; }
   void clearRemoveProp() { m_triggerRemoveProp = false; }
 
+  // Both states: a click on the minimap asks to move the player to that
+  // tile. The state snaps it to the nearest standable tile.
+  bool triggerTeleport() const { return m_triggerTeleport; }
+  int teleportX() const { return m_teleportX; }
+  int teleportY() const { return m_teleportY; }
+  void clearTeleport() { m_triggerTeleport = false; }
+
   // --- Magic book inspection ---
   // Pinning suppresses the trip-decay despawn so the book stays put for as
   // long as it takes to look at it.
@@ -109,6 +116,11 @@ private:
   void drawMinimapSection(Player &player, Maze &maze);
   void drawIslandSection(Player &player, Overworld &world);
   void drawIslandMapSection(Player &player, Overworld &world);
+  void requestTeleport(int x, int y) {
+    m_teleportX = x;
+    m_teleportY = y;
+    m_triggerTeleport = true;
+  }
 
   // Opens the panel window around `body`; shared by both render overloads.
   template <typename Body> void panel(float scale, Body body);
@@ -138,6 +150,8 @@ private:
   bool m_triggerEndTrip = false;
   bool m_triggerNewIsland = false;
   bool m_triggerRemoveProp = false;
+  bool m_triggerTeleport = false;
+  int m_teleportX = 0, m_teleportY = 0;
 
   // Island map cache
   Texture2D m_islandTexture{};

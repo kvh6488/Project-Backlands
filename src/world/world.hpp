@@ -1,7 +1,9 @@
 #pragma once
 
 #include "items/item.hpp"
+#include <algorithm>
 #include <cmath>
+#include <cstdlib>
 
 class Maze;
 class Overworld;
@@ -54,6 +56,21 @@ public:
   // Does this cell stop the player outright? Context-dependent solidity (a
   // room's floor seen from its corridor) is a maze rule and stays in Maze.
   virtual bool isSolid(int x, int y) const = 0;
+
+  // Moves (x, y) to the nearest non-solid cell, searching square rings out to
+  // maxRadius. False, and (x, y) untouched, if every cell in range is solid.
+  bool nearestOpenCell(int &x, int &y, int maxRadius) const {
+    for (int r = 0; r <= maxRadius; ++r)
+      for (int dy = -r; dy <= r; ++dy)
+        for (int dx = -r; dx <= r; ++dx)
+          if (std::max(std::abs(dx), std::abs(dy)) == r &&
+              !isSolid(x + dx, y + dy)) {
+            x += dx;
+            y += dy;
+            return true;
+          }
+    return false;
+  }
 
   // --- The item layer: at most one item per cell ---
   virtual ItemType getItem(int x, int y) const = 0;
