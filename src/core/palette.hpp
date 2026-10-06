@@ -73,20 +73,22 @@ inline constexpr Color yellow[13] = {
     Color{246, 233, 152, 255},  // 12 #f6e998
 };
 
-inline constexpr int greenSteps = 12;
-inline constexpr Color green[12] = {
+inline constexpr int greenSteps = 14;
+inline constexpr Color green[14] = {
     Color{ 15,  57,  15, 255},  //  0 #0f390f
     Color{ 22,  78,  25, 255},  //  1 #164e19
     Color{  6,  92,  57, 255},  //  2 #065c39
     Color{ 60, 103,  35, 255},  //  3 #3c6723
     Color{ 27, 119,  88, 255},  //  4 #1b7758
-    Color{ 61, 127,  65, 255},  //  5 #3d7f41
-    Color{106, 134,  87, 255},  //  6 #6a8657
-    Color{118, 150,  60, 255},  //  7 #76963c
-    Color{123, 150, 100, 255},  //  8 #7b9664
-    Color{105, 167,  84, 255},  //  9 #69a754
-    Color{145, 202,  81, 255},  // 10 #91ca51
-    Color{183, 240, 116, 255},  // 11 #b7f074
+    Color{ 83, 118,  62, 255},  //  5 #53763e
+    Color{ 61, 127,  65, 255},  //  6 #3d7f41
+    Color{ 85, 131,  76, 255},  //  7 #55834c
+    Color{106, 134,  87, 255},  //  8 #6a8657
+    Color{118, 150,  60, 255},  //  9 #76963c
+    Color{123, 150, 100, 255},  // 10 #7b9664
+    Color{105, 167,  84, 255},  // 11 #69a754
+    Color{145, 202,  81, 255},  // 12 #91ca51
+    Color{183, 240, 116, 255},  // 13 #b7f074
 };
 
 inline constexpr int blueSteps = 7;
@@ -110,7 +112,7 @@ inline constexpr Color accent[6] = {
     Color{149, 218,  65, 255},  //  5 #95da41
 };
 
-inline constexpr int totalColours = 72;
+inline constexpr int totalColours = 74;
 
 // Every colour in strip order, for the conformance test and any future
 // palette texture upload.

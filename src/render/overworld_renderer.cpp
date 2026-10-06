@@ -18,12 +18,11 @@ namespace {
 //
 // SWAMP_WATER sits on the open water. GROUND is all land: its edge is the
 // sand-and-foam coast where the ocean is, a mud bank on lakes and rivers.
-// MEADOW and FOREST are SHADE OVERLAYS on grass, DRIFT on snow: the ground
-// fading by the tile's shade step (TileSample::shade). Deep forest (shade 3)
-// draws as forest; the step only thickens the trees.
+// MEADOW, FOREST and FOREST_DEEP are SHADE OVERLAYS on grass, DRIFT on snow:
+// the ground fading by the tile's shade step (TileSample::shade).
 enum Layer {
-  SWAMP_WATER, GROUND, GRASS, MEADOW, FOREST, WETLAND, GRAVEL, SNOW, DRIFT,
-  LAYER_COUNT
+  SWAMP_WATER, GROUND, GRASS, MEADOW, FOREST, FOREST_DEEP,
+  WETLAND, GRAVEL, SNOW, DRIFT, LAYER_COUNT
 };
 
 bool isOpenWater(Biome b) { return isWater(b) && b != Biome::SWAMP; }
@@ -34,6 +33,7 @@ bool inLayer(int layer, Biome b, uint8_t shade) {
   case GRASS: return !isWater(b) && b != Biome::BEACH;
   case MEADOW: return (b == Biome::GRASSLAND && shade >= 1) || b == Biome::FOREST;
   case FOREST: return b == Biome::FOREST;
+  case FOREST_DEEP: return b == Biome::FOREST && shade == 3;
   case WETLAND: return b == Biome::WETLAND;
   case GRAVEL: return b == Biome::MOUNTAIN || b == Biome::SNOW;
   case SNOW: return b == Biome::SNOW;
@@ -46,7 +46,7 @@ bool inLayer(int layer, Biome b, uint8_t shade) {
 // cleanly, on the base's outline, against everything else.
 int overlayBase(int layer) {
   switch (layer) {
-  case MEADOW: case FOREST: return GRASS;
+  case MEADOW: case FOREST: case FOREST_DEEP: return GRASS;
   case DRIFT: return SNOW;
   default: return -1;
   }
@@ -57,7 +57,7 @@ int overlayBase(int layer) {
 // edge); GROUND draws the bank row's edges and its fill is sand or mud.
 // assets/ow_shades.png: one row per overlay, 81 three-state corner tiles
 // (TL*27 + TR*9 + BL*3 + BR; 0 off the base, 1 base, 2 shaded), then fills.
-constexpr int kTerrainRow[LAYER_COUNT] = {-1, 5, 0, -1, -1, 1, 2, 3, -1};
+constexpr int kTerrainRow[LAYER_COUNT] = {-1, 5, 0, -1, -1, -1, 1, 2, 3, -1};
 constexpr int kSandRow = 4, kBankRow = 5;
 constexpr int kShadeFillCol = 81;
 constexpr int kFillCol = 16, kFillCount = 4;
@@ -173,7 +173,7 @@ constexpr int kReachSideTiles = widestFrame() / 2 + 1;
 OverworldRenderer::~OverworldRenderer() {
   if (!IsWindowReady())
     return;
-  for (Texture2D t : {m_water, m_coast, m_terrain, m_shades, m_props})
+  for (Texture2D t : {m_water, m_coast, m_terrain, m_shades, m_props, m_propsWet})
     if (t.id != 0)
       UnloadTexture(t);
 }
@@ -184,6 +184,7 @@ void OverworldRenderer::loadTextures() {
   m_terrain = assets::loadTexture("assets/ow_terrain.png", "OverworldRenderer");
   m_shades = assets::loadTexture("assets/ow_shades.png", "OverworldRenderer");
   m_props = assets::loadTexture("assets/ow_props.png", "OverworldRenderer");
+  m_propsWet = assets::loadTexture("assets/ow_props_wet.png", "OverworldRenderer");
 }
 
 Color OverworldRenderer::biomeColour(Biome b) {
@@ -286,7 +287,7 @@ void OverworldRenderer::drawLayer(int layer, int x0, int y0, int w, int h,
           any = any || st == 2;
           all = all && st == 2;
         }
-        const int orow = layer == DRIFT ? 2 : layer - MEADOW;
+        const int orow = layer == DRIFT ? 3 : layer - MEADOW;
         if (any)
           draw(m_shades, grid::srcTile(all ? kShadeFillCol + v : idx, orow), vx, vy);
         continue;
@@ -372,6 +373,38 @@ void OverworldRenderer::drawQueued(int x, int y) const {
   // In front = rooted lower than the player; the queue already drew it later.
   bool covers = (y + 1) * grid::CELL > m_focus.y &&
                 CheckCollisionPointRec(m_focus, dest);
-  DrawTexturePro(m_props, src, dest, {0, 0}, 0.0f,
-                 covers ? Fade(WHITE, kCoverAlpha) : WHITE);
+  const Color tint = covers ? Fade(WHITE, kCoverAlpha) : WHITE;
+
+  // Roots wider than the tile spill onto the cells beside it. Over water,
+  // that slice of the bottom row draws from the submerged copy instead.
+  // Frames are centred on the tile, so a slice boundary can fall mid-column;
+  // slices are cut at world cell edges, in canvas px.
+  const float bottomY = dest.y + dest.height - grid::CELL;
+  const int cx0 = (int)std::floor(dest.x / grid::CELL);
+  const int cx1 = (int)std::ceil((dest.x + dest.width) / grid::CELL) - 1;
+  bool wet = false;
+  for (int cx = cx0; cx <= cx1 && !wet; ++cx)
+    wet = cx != x && isWater(m_world->biomeAt(cx, y));
+  if (!wet) {
+    DrawTexturePro(m_props, src, dest, {0, 0}, 0.0f, tint);
+    return;
+  }
+  Rectangle upper = src;
+  upper.height -= grid::SOURCE_TILE;
+  DrawTexturePro(m_props, upper, {dest.x, dest.y, dest.width, dest.height - grid::CELL},
+                 {0, 0}, 0.0f, tint);
+  for (int cx = cx0; cx <= cx1; ++cx) {
+    const float left = std::max(dest.x, (float)cx * grid::CELL);
+    const float right = std::min(dest.x + dest.width, (float)(cx + 1) * grid::CELL);
+    if (right <= left)
+      continue;
+    const bool sunk = cx != x && isWater(m_world->biomeAt(cx, y));
+    const float sx = (left - dest.x) / grid::WORLD_SCALE;
+    Rectangle piece = {src.x + sx,
+                       sunk ? (float)(f.wetRow * grid::SOURCE_TILE)
+                            : src.y + src.height - grid::SOURCE_TILE,
+                       (right - left) / grid::WORLD_SCALE, (float)grid::SOURCE_TILE};
+    DrawTexturePro(sunk ? m_propsWet : m_props, piece,
+                   {left, bottomY, right - left, (float)grid::CELL}, {0, 0}, 0.0f, tint);
+  }
 }

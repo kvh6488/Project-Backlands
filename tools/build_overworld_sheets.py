@@ -19,12 +19,14 @@ Outputs, all the renderer loads:
                   dash), row 1 swamp water fills, row 2 swamp water's 16
                   corner tiles (a dithered edge, so it fades into open water)
   ow_coast.png    High Tides' sand coast: lake + island blocks, 3 foam frames
-  ow_shades.png   shade overlays (meadow, forest floor, snow drifts): 81
+  ow_shades.png   shade overlays (grass -> forest floor, snow drifts): 81
                   tiles per row, one per 3-state corner combination, + fills
   ow_terrain.png  one row per inland material: the 16 corner tiles + fills,
                   and a generated mud BANK row: LightBorne's shapes grown 4 px
                   into the water, the lip a lake or river shows past the grass
   ow_props.png    every tree, bush, rock and reed, repacked on the 16px grid
+  ow_props_wet.png  each prop's bottom tile row again, "submerged": the
+                  lower pixels dithered away, for roots that spill onto water
   src/render/overworld_sprites.hpp   where each prop sits in ow_props.png
 
 CORNER TILES. The renderer autotiles on a dual grid: a tile is drawn on each
@@ -118,13 +120,13 @@ FILLS_PER_ROW = 4  # fewer fills repeat
 
 # Shade overlays (ow_shades.png), one row each, drawn over their base
 # material where Island::sample's shade says so. Each is the base's fills
-# recoloured with colours already in the palette (an approved choice over
-# adding in-between greens): grass gains forest-floor flecks at the meadow
-# edge, then turns forest floor; snow gets grey drifts. Row order is the
-# renderer's shade-overlay order.
+# recoloured: grass fades to forest floor in three steps (#55834c and
+# #53763e were added to the palette for them), snow gets grey drifts. Row
+# order is the renderer's shade-overlay order.
 SHADES = [
-    ("meadow",      "grass", {"#3c6723": "#6a8657"}),
-    ("forest",      "grass", {"#3d7f41": "#6a8657"}),
+    ("meadow",      "grass", {"#3d7f41": "#55834c"}),
+    ("forest",      "grass", {"#3d7f41": "#6a8657", "#3c6723": "#53763e"}),
+    ("forest_deep", "grass", {"#3d7f41": "#53763e"}),
     ("drift",       "snow",  {"#dfe3ed": "#d9d9da", "#d9d9da": "#bdd5de", "#bdd5de": "#a6b7c6"}),
 ]
 SHADE_BAND = 6.0  # px over which an overlay dithers out
@@ -512,7 +514,24 @@ def props_atlas(src):
     atlas = np.zeros(((y + shelf) * T, ATLAS_TILES * T, 4), np.uint8)
     for i, (c, r, fw, fh) in place.items():
         atlas[r * T:(r + fh) * T, c * T:(c + fw) * T] = sprites[i][1]
-    return atlas, [place[i] for i in range(len(sprites))]
+
+    # The submerged bottom rows: one strip row per shelf (frames on a shelf
+    # never overlap horizontally), at the frame's own columns.
+    shelf_tops = sorted({r for _, r, _, _ in place.values()})
+    wet = np.zeros((len(shelf_tops) * T, ATLAS_TILES * T, 4), np.uint8)
+    yy, xx = np.mgrid[0:T, 0:T]
+    # Fully kept down to row 6, then thinning to almost nothing at the base:
+    # roots sinking into the water. Ordered dither, so it stays crisp.
+    keep = BAYER4[yy % 4, xx % 4] < np.clip((T - 1 - yy) / 9.0, 0, 1) * 16
+    frames = []
+    for i in range(len(sprites)):
+        c, r, fw, fh = place[i]
+        k = shelf_tops.index(r)
+        bottom = sprites[i][1][(fh - 1) * T:fh * T].copy()
+        bottom[~np.tile(keep, (1, fw))] = 0
+        wet[k * T:(k + 1) * T, c * T:(c + fw) * T] = bottom
+        frames.append((c, r, fw, fh, k))
+    return atlas, wet, frames
 
 
 def write_header(frames, path):
@@ -526,7 +545,9 @@ def write_header(frames, path):
            "// its base on its bottom edge, so grid::standingOn(frame, x, y) roots it on",
            "// tile (x, y).", "",
            "namespace owsprite {", "",
-           "struct Frame {", "  int col, row, w, h;", "};", "",
+           "// wetRow: the row of ow_props_wet.png holding the frame's submerged",
+           "// bottom row, at the same columns.",
+           "struct Frame {", "  int col, row, w, h, wetRow;", "};", "",
            "enum Id : int {"]
     out += [f"  {n}," for n in names]
     out += ["  COUNT", "};", "",
@@ -534,7 +555,7 @@ def write_header(frames, path):
             f"// rooted and still reach into view.",
             f"inline constexpr int kTallestTiles = {tallest};", "",
             "inline constexpr Frame kFrames[COUNT] = {"]
-    out += [f"    {{{c}, {r}, {w}, {h}}}, // {n}" for n, (c, r, w, h) in zip(names, frames)]
+    out += [f"    {{{c}, {r}, {w}, {h}, {k}}}, // {n}" for n, (c, r, w, h, k) in zip(names, frames)]
     out += ["};", "", "} // namespace owsprite", ""]
     with open(path, "w", newline="\n") as f:
         f.write("\n".join(out))
@@ -563,8 +584,9 @@ def main():
     save(src["coast"], os.path.join(assets, "ow_coast.png"))
     save(terrain_sheet(src, pal), os.path.join(assets, "ow_terrain.png"))
     save(shades_sheet(src, pal), os.path.join(assets, "ow_shades.png"))
-    atlas, frames = props_atlas(src)
+    atlas, wet, frames = props_atlas(src)
     save(atlas, os.path.join(assets, "ow_props.png"))
+    save(wet, os.path.join(assets, "ow_props_wet.png"))
     write_header(frames, os.path.join(ROOT, "src", "render", "overworld_sprites.hpp"))
     print(f"wrote src/render/overworld_sprites.hpp: {len(frames)} props")
     return 0

@@ -2,7 +2,7 @@
 
 **Status:** approved 2026-09-11 (`tools/palette_sample.py --config yellow12`, 56
 colours); extended for the overworld 2026-10-06 (+16, 72 colours, see
-"Overworld additions").
+"Overworld additions") and for the grass-to-forest fade the same day (+2, 74).
 Every PNG in `assets/` is quantized to it; `python tools/quantize.py --check assets/`
 is the acceptance test and must stay at 100 %.
 
@@ -63,11 +63,12 @@ Evidence from the gate:
 - `artifacts/palette_preview/carpet_zoom.png` — 4× of the carpet and a table,
   which is where the candidates differ most.
 
-## The palette (72 colours, 7 ramps)
+## The palette (74 colours, 7 ramps)
 
 Every hex is a colour that exists on a source sheet - nothing is invented.
 Steps run dark → light, step 0 first. 56 came from the sampler; the 16 marked
-in "Overworld additions" were added for the surface.
+in "Overworld additions" were added for the surface, and two more for the
+grass-to-forest fade (the only colours here not taken from a source sheet).
 
 | Ramp | Steps | Hexes |
 |---|---|---|
@@ -75,7 +76,7 @@ in "Overworld additions" were added for the surface.
 | grey | 12 | `#1d1c27` `#2b2b45` `#383847` `#474858` `#41564b` `#4b4d71` `#576477` `#717d8f` `#829da5` `#a6b7c6` `#b4c4e4` `#bdd5de` |
 | brown | 13 | `#2f190b` `#4a2a19` `#663b27` `#7d4c2e` `#936340` `#ad5226` `#927e65` `#b17a4e` `#d06732` `#c98321` `#cc9770` `#f4a568` `#d8b289` |
 | yellow | 13 | `#382e16` `#483a20` `#544527` `#665932` `#74653c` `#87784a` `#96894e` `#a79757` `#b4ac6a` `#ccbe68` `#e8d282` `#edd19a` `#f6e998` |
-| green | 12 | `#0f390f` `#164e19` `#065c39` `#3c6723` `#1b7758` `#3d7f41` `#6a8657` `#76963c` `#7b9664` `#69a754` `#91ca51` `#b7f074` |
+| green | 14 | `#0f390f` `#164e19` `#065c39` `#3c6723` `#1b7758` `#53763e` `#3d7f41` `#55834c` `#6a8657` `#76963c` `#7b9664` `#69a754` `#91ca51` `#b7f074` |
 | blue | 7 | `#152d5c` `#2f4876` `#0f5f5b` `#3b6590` `#4e91af` `#6ea7c6` `#91d6e8` |
 | accent | 6 | `#6b2643` `#063ee6` `#b02a2a` `#f43636` `#cc99ff` `#95da41` |
 
@@ -93,7 +94,8 @@ lighting's job - the maze is dark because of its torch mask, and the surface's
 day/night tint lands with Phase 5 - not the palette's.
 
 Measured instead of prescribed: maze sheets use 55 colours, overworld sheets
-68, both 51, and every one of the 72 is used by some shipped sheet.
+68, both 51, and every one of the 72 is used by some shipped sheet (measured
+before the fade greens; those two are used only by ow_shades.png).
 
 ## How it was built
 
@@ -180,6 +182,7 @@ byte-identical.
 | `#065c39` `#1b7758` | green | deep green; the teal LightBorne canopies take |
 | `#6a8657` `#7b9664` | green | LightBorne olive greens |
 | `#0f5f5b` | blue | Pixel Crawler's teal pines |
+| `#55834c` `#53763e` | green | the grass-to-forest fade (ow_shades.png): the OKLab midpoint of grass `#3d7f41` and forest floor `#6a8657`, and of grass detail `#3c6723` and `#6a8657`. Mixed, not sampled; approved over a no-new-colours version after side-by-side screenshots |
 
 Deliberate effects, kept by leaving colours *out*: Pixel Crawler grass and
 water quantize exactly as on the 56 (no bright grass green, no extra water

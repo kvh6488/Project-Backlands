@@ -89,7 +89,7 @@ public:
 private:
   void drawLayer(int layer, int x0, int y0, int w, int h, int frame) const;
 
-  Texture2D m_water{}, m_coast{}, m_terrain{}, m_shades{}, m_props{};
+  Texture2D m_water{}, m_coast{}, m_terrain{}, m_shades{}, m_props{}, m_propsWet{};
   const Overworld *m_world = nullptr;
   Vector2 m_focus{};
   // The cells around the view, (w+2) x (h+2), rebuilt per frame so each

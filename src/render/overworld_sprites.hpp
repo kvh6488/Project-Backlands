@@ -8,8 +8,10 @@
 
 namespace owsprite {
 
+// wetRow: the row of ow_props_wet.png holding the frame's submerged
+// bottom row, at the same columns.
 struct Frame {
-  int col, row, w, h;
+  int col, row, w, h, wetRow;
 };
 
 enum Id : int {
@@ -137,122 +139,122 @@ enum Id : int {
 inline constexpr int kTallestTiles = 16;
 
 inline constexpr Frame kFrames[COUNT] = {
-    {10, 69, 6, 7}, // OAK_AUTUMN_A
-    {16, 69, 5, 7}, // OAK_AUTUMN_B
-    {21, 69, 6, 7}, // OAK_SUMMER_A
-    {27, 69, 5, 7}, // OAK_SUMMER_B
-    {32, 69, 6, 7}, // OAK_WINTER_A
-    {0, 77, 5, 7}, // OAK_WINTER_B
-    {32, 77, 5, 6}, // OAK_BARE_A
-    {0, 84, 5, 6}, // OAK_BARE_B
-    {24, 52, 5, 8}, // BIRCH_AUTUMN_A
-    {29, 52, 5, 8}, // BIRCH_AUTUMN_B
-    {34, 52, 5, 8}, // BIRCH_SUMMER_A
-    {0, 61, 5, 8}, // BIRCH_SUMMER_B
-    {5, 61, 5, 8}, // BIRCH_WINTER_A
-    {10, 61, 5, 8}, // BIRCH_WINTER_B
-    {5, 84, 5, 6}, // BIRCH_BARE_A
-    {10, 84, 5, 6}, // BIRCH_BARE_B
-    {0, 52, 5, 9}, // FIR_0
-    {15, 61, 5, 8}, // FIR_1
-    {5, 77, 4, 7}, // FIR_2
-    {15, 84, 4, 6}, // FIR_3
-    {4, 96, 3, 4}, // FIR_4
-    {9, 77, 7, 7}, // FIR_DARK_0
-    {19, 84, 4, 6}, // FIR_DARK_1
-    {7, 96, 4, 4}, // FIR_DARK_2
-    {35, 96, 3, 3}, // FIR_DARK_3
-    {11, 96, 3, 4}, // PC1_S2_GREEN
-    {14, 96, 3, 4}, // PC1_S2_TAN
-    {38, 96, 2, 3}, // PC1_S2_BARE
-    {0, 101, 2, 3}, // PC1_S2_FROZEN
-    {17, 96, 3, 4}, // PC1_S2_ORANGE
-    {20, 96, 3, 4}, // PC1_S2_AMBER
-    {23, 84, 3, 6}, // PC1_S3_GREEN
-    {26, 84, 3, 6}, // PC1_S3_TAN
-    {29, 84, 3, 6}, // PC1_S3_BARE
-    {32, 84, 3, 6}, // PC1_S3_FROZEN
-    {35, 84, 3, 6}, // PC1_S3_ORANGE
-    {0, 90, 3, 6}, // PC1_S3_AMBER
-    {20, 61, 5, 8}, // PC1_S4_GREEN
-    {25, 61, 5, 8}, // PC1_S4_TAN
-    {30, 61, 5, 8}, // PC1_S4_BARE
-    {35, 61, 5, 8}, // PC1_S4_FROZEN
-    {0, 69, 5, 8}, // PC1_S4_ORANGE
-    {5, 69, 5, 8}, // PC1_S4_AMBER
-    {0, 32, 7, 10}, // PC1_S5_GREEN
-    {7, 32, 7, 10}, // PC1_S5_TAN
-    {14, 32, 7, 10}, // PC1_S5_BARE
-    {21, 32, 7, 10}, // PC1_S5_FROZEN
-    {28, 32, 7, 10}, // PC1_S5_ORANGE
-    {0, 42, 7, 10}, // PC1_S5_AMBER
-    {2, 101, 2, 3}, // PC2_S2_TEAL
-    {4, 101, 2, 3}, // PC2_S2_TEAL_B
-    {6, 101, 2, 3}, // PC2_S2_GREEN
-    {8, 101, 2, 3}, // PC2_S2_GREEN_B
-    {21, 90, 3, 5}, // PC2_S3_TEAL
-    {24, 90, 3, 5}, // PC2_S3_TEAL_B
-    {27, 90, 3, 5}, // PC2_S3_BARE
-    {30, 90, 3, 5}, // PC2_S3_GREEN
-    {33, 90, 3, 5}, // PC2_S3_GREEN_B
-    {16, 77, 4, 7}, // PC2_S4_TEAL
-    {20, 77, 4, 7}, // PC2_S4_TEAL_B
-    {3, 90, 3, 6}, // PC2_S4_BARE
-    {24, 77, 4, 7}, // PC2_S4_GREEN
-    {28, 77, 4, 7}, // PC2_S4_GREEN_B
-    {7, 42, 6, 10}, // PC2_S5_TEAL
-    {13, 42, 6, 10}, // PC2_S5_TEAL_B
-    {19, 42, 6, 10}, // PC2_S5_BARE
-    {25, 42, 6, 10}, // PC2_S5_GREEN
-    {31, 42, 6, 10}, // PC2_S5_GREEN_B
-    {36, 90, 2, 5}, // PC3_S2_GREEN
-    {38, 90, 2, 5}, // PC3_S2_OLIVE
-    {0, 96, 2, 5}, // PC3_S2_TAN
-    {2, 96, 2, 5}, // PC3_S2_RUST
-    {5, 52, 4, 9}, // PC3_S3_GREEN
-    {9, 52, 4, 9}, // PC3_S3_OLIVE
-    {13, 52, 4, 9}, // PC3_S3_TAN
-    {17, 52, 4, 9}, // PC3_S3_RUST
-    {21, 52, 3, 9}, // PC3_S3_BARE
-    {7, 16, 7, 13}, // PC3_S4_GREEN
-    {14, 16, 7, 13}, // PC3_S4_OLIVE
-    {21, 16, 7, 13}, // PC3_S4_TAN
-    {28, 16, 7, 13}, // PC3_S4_RUST
-    {35, 16, 5, 13}, // PC3_S4_BARE
-    {0, 0, 9, 16}, // PC3_S5_GREEN
-    {9, 0, 9, 16}, // PC3_S5_OLIVE
-    {18, 0, 9, 16}, // PC3_S5_TAN
-    {27, 0, 9, 16}, // PC3_S5_RUST
-    {0, 16, 7, 16}, // PC3_S5_BARE
-    {6, 90, 6, 6}, // WILLOW_LIT
-    {12, 90, 6, 6}, // WILLOW
-    {23, 96, 3, 4}, // WILLOW_S_A
-    {26, 96, 3, 4}, // WILLOW_S_B
-    {29, 96, 3, 4}, // WILLOW_S_C
-    {18, 90, 3, 6}, // PALM_TALL
-    {32, 96, 3, 4}, // PALM_SHORT
-    {14, 101, 3, 2}, // BUSH_A
-    {17, 101, 2, 2}, // BUSH_B
-    {19, 101, 3, 2}, // BUSH_C
-    {22, 101, 2, 2}, // BUSH_D
-    {32, 101, 2, 1}, // BUSH_LOW
-    {34, 101, 1, 1}, // BUSH_SMALL
-    {35, 101, 1, 1}, // ROCK_GREY_0
-    {36, 101, 1, 1}, // ROCK_GREY_1
-    {37, 101, 1, 1}, // ROCK_GREY_2
-    {38, 101, 1, 1}, // ROCK_GREY_3
-    {39, 101, 1, 1}, // ROCK_GREY_4
-    {24, 101, 2, 2}, // ROCK_GREY_BIG
-    {0, 104, 1, 1}, // ROCK_MOSS_1
-    {1, 104, 1, 1}, // ROCK_MOSS_2
-    {2, 104, 1, 1}, // ROCK_MOSS_3
-    {10, 101, 2, 3}, // BOULDER_BROWN
-    {26, 101, 2, 2}, // BOULDER_BROWN_LOW
-    {12, 101, 2, 3}, // BOULDER_GREY
-    {28, 101, 2, 2}, // BOULDER_GREY_LOW
-    {30, 101, 1, 2}, // CATTAIL_TALL
-    {31, 101, 1, 2}, // CATTAIL_SHORT
-    {3, 104, 2, 1}, // SWAMP_PLANT
+    {10, 69, 6, 7, 6}, // OAK_AUTUMN_A
+    {16, 69, 5, 7, 6}, // OAK_AUTUMN_B
+    {21, 69, 6, 7, 6}, // OAK_SUMMER_A
+    {27, 69, 5, 7, 6}, // OAK_SUMMER_B
+    {32, 69, 6, 7, 6}, // OAK_WINTER_A
+    {0, 77, 5, 7, 7}, // OAK_WINTER_B
+    {32, 77, 5, 6, 7}, // OAK_BARE_A
+    {0, 84, 5, 6, 8}, // OAK_BARE_B
+    {24, 52, 5, 8, 4}, // BIRCH_AUTUMN_A
+    {29, 52, 5, 8, 4}, // BIRCH_AUTUMN_B
+    {34, 52, 5, 8, 4}, // BIRCH_SUMMER_A
+    {0, 61, 5, 8, 5}, // BIRCH_SUMMER_B
+    {5, 61, 5, 8, 5}, // BIRCH_WINTER_A
+    {10, 61, 5, 8, 5}, // BIRCH_WINTER_B
+    {5, 84, 5, 6, 8}, // BIRCH_BARE_A
+    {10, 84, 5, 6, 8}, // BIRCH_BARE_B
+    {0, 52, 5, 9, 4}, // FIR_0
+    {15, 61, 5, 8, 5}, // FIR_1
+    {5, 77, 4, 7, 7}, // FIR_2
+    {15, 84, 4, 6, 8}, // FIR_3
+    {4, 96, 3, 4, 10}, // FIR_4
+    {9, 77, 7, 7, 7}, // FIR_DARK_0
+    {19, 84, 4, 6, 8}, // FIR_DARK_1
+    {7, 96, 4, 4, 10}, // FIR_DARK_2
+    {35, 96, 3, 3, 10}, // FIR_DARK_3
+    {11, 96, 3, 4, 10}, // PC1_S2_GREEN
+    {14, 96, 3, 4, 10}, // PC1_S2_TAN
+    {38, 96, 2, 3, 10}, // PC1_S2_BARE
+    {0, 101, 2, 3, 11}, // PC1_S2_FROZEN
+    {17, 96, 3, 4, 10}, // PC1_S2_ORANGE
+    {20, 96, 3, 4, 10}, // PC1_S2_AMBER
+    {23, 84, 3, 6, 8}, // PC1_S3_GREEN
+    {26, 84, 3, 6, 8}, // PC1_S3_TAN
+    {29, 84, 3, 6, 8}, // PC1_S3_BARE
+    {32, 84, 3, 6, 8}, // PC1_S3_FROZEN
+    {35, 84, 3, 6, 8}, // PC1_S3_ORANGE
+    {0, 90, 3, 6, 9}, // PC1_S3_AMBER
+    {20, 61, 5, 8, 5}, // PC1_S4_GREEN
+    {25, 61, 5, 8, 5}, // PC1_S4_TAN
+    {30, 61, 5, 8, 5}, // PC1_S4_BARE
+    {35, 61, 5, 8, 5}, // PC1_S4_FROZEN
+    {0, 69, 5, 8, 6}, // PC1_S4_ORANGE
+    {5, 69, 5, 8, 6}, // PC1_S4_AMBER
+    {0, 32, 7, 10, 2}, // PC1_S5_GREEN
+    {7, 32, 7, 10, 2}, // PC1_S5_TAN
+    {14, 32, 7, 10, 2}, // PC1_S5_BARE
+    {21, 32, 7, 10, 2}, // PC1_S5_FROZEN
+    {28, 32, 7, 10, 2}, // PC1_S5_ORANGE
+    {0, 42, 7, 10, 3}, // PC1_S5_AMBER
+    {2, 101, 2, 3, 11}, // PC2_S2_TEAL
+    {4, 101, 2, 3, 11}, // PC2_S2_TEAL_B
+    {6, 101, 2, 3, 11}, // PC2_S2_GREEN
+    {8, 101, 2, 3, 11}, // PC2_S2_GREEN_B
+    {21, 90, 3, 5, 9}, // PC2_S3_TEAL
+    {24, 90, 3, 5, 9}, // PC2_S3_TEAL_B
+    {27, 90, 3, 5, 9}, // PC2_S3_BARE
+    {30, 90, 3, 5, 9}, // PC2_S3_GREEN
+    {33, 90, 3, 5, 9}, // PC2_S3_GREEN_B
+    {16, 77, 4, 7, 7}, // PC2_S4_TEAL
+    {20, 77, 4, 7, 7}, // PC2_S4_TEAL_B
+    {3, 90, 3, 6, 9}, // PC2_S4_BARE
+    {24, 77, 4, 7, 7}, // PC2_S4_GREEN
+    {28, 77, 4, 7, 7}, // PC2_S4_GREEN_B
+    {7, 42, 6, 10, 3}, // PC2_S5_TEAL
+    {13, 42, 6, 10, 3}, // PC2_S5_TEAL_B
+    {19, 42, 6, 10, 3}, // PC2_S5_BARE
+    {25, 42, 6, 10, 3}, // PC2_S5_GREEN
+    {31, 42, 6, 10, 3}, // PC2_S5_GREEN_B
+    {36, 90, 2, 5, 9}, // PC3_S2_GREEN
+    {38, 90, 2, 5, 9}, // PC3_S2_OLIVE
+    {0, 96, 2, 5, 10}, // PC3_S2_TAN
+    {2, 96, 2, 5, 10}, // PC3_S2_RUST
+    {5, 52, 4, 9, 4}, // PC3_S3_GREEN
+    {9, 52, 4, 9, 4}, // PC3_S3_OLIVE
+    {13, 52, 4, 9, 4}, // PC3_S3_TAN
+    {17, 52, 4, 9, 4}, // PC3_S3_RUST
+    {21, 52, 3, 9, 4}, // PC3_S3_BARE
+    {7, 16, 7, 13, 1}, // PC3_S4_GREEN
+    {14, 16, 7, 13, 1}, // PC3_S4_OLIVE
+    {21, 16, 7, 13, 1}, // PC3_S4_TAN
+    {28, 16, 7, 13, 1}, // PC3_S4_RUST
+    {35, 16, 5, 13, 1}, // PC3_S4_BARE
+    {0, 0, 9, 16, 0}, // PC3_S5_GREEN
+    {9, 0, 9, 16, 0}, // PC3_S5_OLIVE
+    {18, 0, 9, 16, 0}, // PC3_S5_TAN
+    {27, 0, 9, 16, 0}, // PC3_S5_RUST
+    {0, 16, 7, 16, 1}, // PC3_S5_BARE
+    {6, 90, 6, 6, 9}, // WILLOW_LIT
+    {12, 90, 6, 6, 9}, // WILLOW
+    {23, 96, 3, 4, 10}, // WILLOW_S_A
+    {26, 96, 3, 4, 10}, // WILLOW_S_B
+    {29, 96, 3, 4, 10}, // WILLOW_S_C
+    {18, 90, 3, 6, 9}, // PALM_TALL
+    {32, 96, 3, 4, 10}, // PALM_SHORT
+    {14, 101, 3, 2, 11}, // BUSH_A
+    {17, 101, 2, 2, 11}, // BUSH_B
+    {19, 101, 3, 2, 11}, // BUSH_C
+    {22, 101, 2, 2, 11}, // BUSH_D
+    {32, 101, 2, 1, 11}, // BUSH_LOW
+    {34, 101, 1, 1, 11}, // BUSH_SMALL
+    {35, 101, 1, 1, 11}, // ROCK_GREY_0
+    {36, 101, 1, 1, 11}, // ROCK_GREY_1
+    {37, 101, 1, 1, 11}, // ROCK_GREY_2
+    {38, 101, 1, 1, 11}, // ROCK_GREY_3
+    {39, 101, 1, 1, 11}, // ROCK_GREY_4
+    {24, 101, 2, 2, 11}, // ROCK_GREY_BIG
+    {0, 104, 1, 1, 12}, // ROCK_MOSS_1
+    {1, 104, 1, 1, 12}, // ROCK_MOSS_2
+    {2, 104, 1, 1, 12}, // ROCK_MOSS_3
+    {10, 101, 2, 3, 11}, // BOULDER_BROWN
+    {26, 101, 2, 2, 11}, // BOULDER_BROWN_LOW
+    {12, 101, 2, 3, 11}, // BOULDER_GREY
+    {28, 101, 2, 2, 11}, // BOULDER_GREY_LOW
+    {30, 101, 1, 2, 11}, // CATTAIL_TALL
+    {31, 101, 1, 2, 11}, // CATTAIL_SHORT
+    {3, 104, 2, 1, 12}, // SWAMP_PLANT
 };
 
 } // namespace owsprite
