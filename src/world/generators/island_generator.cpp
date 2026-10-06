@@ -253,15 +253,38 @@ void chooseSwamps(IslandMap &m, const TerrainField &field, uint32_t seed) {
                                   m.lakeLevel[id]);
     cells[id]++;
   }
-  int fallback = -1; // the warmest lake, in case no roll succeeds
+  // How far inland each lake lies: its mean distance from the sea, as a
+  // share of the furthest any land gets. Swamps keep to a band of it.
+  std::vector<float> inland(lakes, 0.0f);
+  float deepest = 1e-6f;
+  for (int c = 0; c < N; ++c) {
+    deepest = std::max(deepest, m.ocean[c] ? 0.0f : m.oceanDist[c]);
+    if (m.lake[c] >= 0)
+      inland[m.lake[c]] += m.oceanDist[c];
+  }
+  auto inBand = [&](int id) {
+    const float f = inland[id] / deepest;
+    return f >= island::kSwampBandFrom && f <= island::kSwampBandTo;
+  };
+  // In case no roll succeeds: the warmest lake in the band, or failing that
+  // the lake nearest the band.
+  int fallback = -1;
+  auto bandGap = [&](int id) {
+    const float f = inland[id] / deepest;
+    return std::max({0.0f, island::kSwampBandFrom - f, f - island::kSwampBandTo});
+  };
   for (int id = 0; id < lakes; ++id) {
     temp[id] /= cells[id];
-    if (fallback < 0 || temp[id] > temp[fallback])
+    inland[id] /= cells[id];
+  }
+  for (int id = 0; id < lakes; ++id) {
+    if (fallback < 0 || bandGap(id) < bandGap(fallback) ||
+        (bandGap(id) == bandGap(fallback) && temp[id] > temp[fallback]))
       fallback = id;
   }
   bool any = false;
   for (int id = 0; id < lakes; ++id) {
-    if (temp[id] >= island::kSwampMinTemperature &&
+    if (inBand(id) && temp[id] >= island::kSwampMinTemperature &&
         noise::unit(id, 0, seed) < island::kSwampChance) {
       m.lakeSwamp[id] = 1;
       any = true;
@@ -336,7 +359,7 @@ void chooseSwamps(IslandMap &m, const TerrainField &field, uint32_t seed) {
     }
     bool joined = false;
     for (int id = 0; id < lakes; ++id) {
-      if (!m.lakeSwamp[id] && shore[id] > 0 && 2 * wet[id] > shore[id]) {
+      if (!m.lakeSwamp[id] && inBand(id) && shore[id] > 0 && 2 * wet[id] > shore[id]) {
         m.lakeSwamp[id] = 1;
         joined = true;
       }
@@ -371,10 +394,10 @@ IslandMap buildIslandMap(const TerrainField &field, const IslandConfig &cfg,
   findLakes(m);
   drain(m);
   traceRivers(m, noise::hash(6, 0, seed));
-  chooseSwamps(m, field, noise::hash(7, 0, seed));
   m.waterDist = distanceFrom(
       m, [&](int c) { return m.ocean[c] || m.lake[c] >= 0 || m.river[c]; });
   m.oceanDist = distanceFrom(m, [&](int c) { return m.ocean[c] != 0; });
+  chooseSwamps(m, field, noise::hash(7, 0, seed)); // reads oceanDist
   m.swampDist = distanceFrom(m, [&](int c) {
     return m.swampRiver[c] || (m.lake[c] >= 0 && m.lakeSwamp[m.lake[c]]);
   });

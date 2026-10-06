@@ -3,6 +3,12 @@
 // ============================================================================
 // ow_fade - one fade material (swamp water, wetland, gravel, snow, drift)
 // drawn pixel by pixel over the view. OverworldRenderer::drawFade.
+//
+// SWAMP WATER (layer 0) is not a weighted fade: at each dual-grid corner it
+// reads which of the four cells are open water and keeps the pixels that
+// corner's mask keeps (the sheet's first row, dithered in along LightBorne's
+// shape) - the shade overlays' fade, done here because the swamp texture
+// sways and so cannot be baked into tiles.
 // ============================================================================
 // COVERAGE. `weights` / `info` hold, per cell, the share of nearby cells that
 // are this material. Sampled bilinear, that is a smooth 0..1 ramp across a
@@ -25,7 +31,9 @@ in vec4 fragColor;
 
 uniform sampler2D texture0; // assets/ow_fades.png
 uniform sampler2D weights;  // per cell: wetland, gravel, snow, drift
-uniform sampler2D info;     // per cell: r = land (grass) flag, g = swamp water
+uniform sampler2D info;     // per cell: r = land (grass) flag, g = swamp water flag
+uniform sampler2D swampWater; // assets/ow_swamp_water.png, a square that tiles
+uniform ivec2 sway;         // the still water's offset now, art px
 uniform ivec2 cellOrigin;   // world cell of texel (0, 0) in weights and info
 uniform int layer;          // the sheet row: 0 swamp, 1 wetland, 2 gravel, 3 snow, 4 drift
 
@@ -61,21 +69,37 @@ bool isLand(ivec2 cell) {
   return texelFetch(info, cell - cellOrigin, 0).r > 0.5;
 }
 
+// Open water: neither land nor swamp.
+int openBit(ivec2 cell, int bit, inout bool swamp) {
+  vec4 i = texelFetch(info, cell - cellOrigin, 0);
+  swamp = swamp || i.g > 0.5;
+  return i.r < 0.5 && i.g < 0.5 ? bit : 0;
+}
+
 void main() {
   // Texture coordinates were set up as world art pixels over the sheet's size.
   vec2 art = fragTexCoord * vec2(textureSize(texture0, 0));
   ivec2 px = ivec2(floor(art));
 
+  if (layer == 0) {
+    ivec2 v = ivec2(floor((art + vec2(T / 2)) / float(T)));
+    ivec2 local = px + ivec2(T / 2) - v * T;
+    bool swamp = false;
+    int open = openBit(v + ivec2(-1, -1), 8, swamp) | openBit(v + ivec2(0, -1), 4, swamp) |
+               openBit(v + ivec2(-1, 0), 2, swamp) | openBit(v, 1, swamp);
+    if (!swamp || texelFetch(texture0, ivec2(open * T + local.x, local.y), 0).a < 0.5)
+      discard;
+    ivec2 size = textureSize(swampWater, 0);
+    ivec2 at = ivec2(mod(vec2(px + sway), vec2(size))); // GLSL % is undefined below 0
+    finalColor = vec4(texelFetch(swampWater, at, 0).rgb, 1.0);
+    return;
+  }
+
   // Coverage. Cell (i) of the data covers art px [i, i+1) * T, its texel
   // centre at the cell's centre, so this lands bilinear between cell centres.
   vec2 uv = (art / float(T) - vec2(cellOrigin)) / vec2(textureSize(weights, 0));
-  float w;
-  if (layer == 0) {
-    w = texture(info, uv).g;
-  } else {
-    vec4 ws = texture(weights, uv);
-    w = layer == 1 ? ws.r : layer == 2 ? ws.g : layer == 3 ? ws.b : min(ws.a, ws.b);
-  }
+  vec4 ws = texture(weights, uv);
+  float w = layer == 1 ? ws.r : layer == 2 ? ws.g : layer == 3 ? ws.b : min(ws.a, ws.b);
   uint salt = uint(layer) * 0x9e3779b9u;
   float n = 0.18 * (2.0 * valueNoise(art / 7.0, salt) - 1.0) +
             0.06 * (2.0 * valueNoise(art / 2.5, salt ^ 0x51edu) - 1.0);
@@ -96,21 +120,19 @@ void main() {
   int variant = int(hash(v, 0x27d4eb2fu) % uint(kFills));
   vec4 colour = texelFetch(texture0, ivec2(variant * T + local.x, layer * T + local.y), 0);
 
-  if (layer != 0) {
-    int mask = (isLand(v + ivec2(-1, -1)) ? 8 : 0) | (isLand(v + ivec2(0, -1)) ? 4 : 0) |
-               (isLand(v + ivec2(-1, 0)) ? 2 : 0) | (isLand(v) ? 1 : 0);
-    if (mask == 0)
+  int mask = (isLand(v + ivec2(-1, -1)) ? 8 : 0) | (isLand(v + ivec2(0, -1)) ? 4 : 0) |
+             (isLand(v + ivec2(-1, 0)) ? 2 : 0) | (isLand(v) ? 1 : 0);
+  if (mask == 0)
+    discard;
+  if (mask != 15) {
+    vec4 code = texelFetch(texture0, ivec2(mask * T + local.x, kMaskRow * T + local.y), 0);
+    if (code.a < 0.5)
       discard;
-    if (mask != 15) {
-      vec4 code = texelFetch(texture0, ivec2(mask * T + local.x, kMaskRow * T + local.y), 0);
-      if (code.a < 0.5)
-        discard;
-      // Body is light; the outline's two shades sit at x = 128 (dark), 129 (mid).
-      if (code.r < 0.27)
-        colour = texelFetch(texture0, ivec2(8 * T, layer * T), 0);
-      else if (code.r < 0.69)
-        colour = texelFetch(texture0, ivec2(8 * T + 1, layer * T), 0);
-    }
+    // Body is light; the outline's two shades sit at x = 128 (dark), 129 (mid).
+    if (code.r < 0.27)
+      colour = texelFetch(texture0, ivec2(8 * T, layer * T), 0);
+    else if (code.r < 0.69)
+      colour = texelFetch(texture0, ivec2(8 * T + 1, layer * T), 0);
   }
   finalColor = vec4(colour.rgb, 1.0);
 }

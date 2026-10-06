@@ -29,12 +29,18 @@
 // A layer's tiles are transparent outside its shape, so the layer beneath
 // shows through and a three-biome corner needs no special tile.
 //
-// FADES: wetland, gravel, snow, drifts and swamp water have no tiles. Each is
-// one quad over the view through a shader (assets/ow_fade.fs) that draws a
-// pixel where the material's share of the nearby cells (shareWithin), read
+// FADES: wetland, gravel, snow and drifts have no tiles. Each is one quad
+// over the view through a shader (assets/ow_fade.fs) that draws a pixel
+// where the material's share of the nearby cells (shareWithin), read
 // bilinear, beats an ordered-dither threshold - so any two of them blend over
 // several tiles. Land fades are clipped to the grass's corner shapes at the
-// shore and take their own outline colour there.
+// shore and take their own outline colour there. Swamp water goes through
+// the same shader but fades like a shade overlay: per dual-grid corner, a
+// mask chosen by which cells are open water dithers it out over a few px.
+//
+// STILL WATER is one repeating texture sampled at world position, like the
+// river; lakes and swamps sway it a pixel or two along the diagonal, and a
+// few open-water tiles glint.
 //
 // ROOTS IN WATER: where one of the widest-rooted props (willow, the big
 // oak) spills onto a river tile, that slice laps through dry, foam line,
@@ -85,13 +91,6 @@ public:
   static void shareWithin(const std::vector<uint8_t> &in,
                           const std::vector<uint8_t> &count, int w, int h,
                           int radius, std::vector<float> &out);
-  // Per cell: how far inside the `in` region it lies, measured only through
-  // `through` cells - 0.5 on the border, 0 or 1 by `radius` + 1 cells away -
-  // so a ramp never jumps what is not `through`. Other cells take the mean of
-  // their `through` neighbours. Two capped BFS passes. Pure.
-  static void rampThrough(const std::vector<uint8_t> &in,
-                          const std::vector<uint8_t> &through, int w, int h,
-                          int radius, std::vector<float> &out);
   // How far (tiles) a fade reaches either side of a border.
   static constexpr int kFadeRadius = 2;
 
@@ -135,15 +134,17 @@ private:
   void buildFades(int x0, int y0, int w, int h);
   void drawFade(int fade, int x0, int y0, int w, int h) const;
   void drawDecals(int x0, int y0, int w, int h) const;
+  void drawGlints(int x0, int y0, int w, int h) const;
   // A cached cell, by world (unwrapped) tile.
   const Cell &cellAt(int x, int y) const {
     return m_cells[(y - m_cellsY0) * m_cellsW + (x - m_cellsX0)];
   }
 
-  Texture2D m_water{}, m_river{}, m_coast{}, m_terrain{}, m_shades{}, m_fades{}, m_props{},
-      m_propsWet{};
+  Texture2D m_water{}, m_river{}, m_swampWater{}, m_glints{}, m_coast{}, m_terrain{},
+      m_shades{}, m_fades{}, m_props{}, m_propsWet{};
   Shader m_fade{};
-  int m_locWeights = -1, m_locInfo = -1, m_locOrigin = -1, m_locLayer = -1;
+  int m_locWeights = -1, m_locInfo = -1, m_locOrigin = -1, m_locLayer = -1,
+      m_locSwampWater = -1, m_locSway = -1;
   // The fade shader's per-cell data, rebuilt per frame: textures, their
   // pixels, the world cell of texel (0, 0), and which fades are in view.
   Texture2D m_weights{}, m_info{};
@@ -152,7 +153,7 @@ private:
   bool m_fadeUsed[5] = {};
   const Overworld *m_world = nullptr;
   Vector2 m_focus{};
-  float m_time = 0.0f; // renderTerrain's, for the props' lapping water
+  float m_time = 0.0f; // renderTerrain's, for the lapping roots, glints and sway
   // The cells around the view, kFadeRadius + 1 past it on every side,
   // rebuilt per frame so the layers' lookups are array reads rather than
   // chunk queries.

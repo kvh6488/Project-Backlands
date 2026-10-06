@@ -15,7 +15,12 @@ OKLab), after two recorded edits: High Tides' flat sea is cut out of the coast
 (our water shows through), and Pixel Crawler's red pine is recoloured rust.
 
 Outputs, all the renderer loads:
-  ow_water.png    generated still water: 8 fills, three with a dash
+  ow_water.png    still water (lakes, the sea): one 64px square that tiles
+                  with itself, with light dashes and a few lighter ones; the
+                  renderer samples it by world position plus a slow
+                  diagonal sway
+  ow_swamp_water.png  swamp water, the same way: murk flecked with duckweed
+  ow_glints.png   a glint's three frames (a spark, a cross, a spark)
   ow_river.png    flowing water: one 64px square that tiles with itself, which
                   the renderer scrolls downstream (dashes a little denser than
                   still water's, so the motion reads)
@@ -28,11 +33,14 @@ Outputs, all the renderer loads:
                   plain mud, then a third and two thirds sand, for banks
                   running into a beach
   ow_fades.png    the FADE materials the renderer's shader draws: one row
-                  each (swamp water, wetland, gravel, snow, snow drift) of 8
-                  fills, then the material's two outline colours as pixels
-                  (x = 128, 129); and a last row of LightBorne's 16 corner
-                  shapes coded body / mid outline / dark outline, which the
-                  shader clips land materials to
+                  each (wetland, gravel, snow, snow drift) of 8 fills, then
+                  the material's two outline colours as pixels (x = 128,
+                  129); a last row of LightBorne's 16 corner shapes coded
+                  body / mid outline / dark outline, which the shader clips
+                  land materials to; and first, the swamp row: 16 masks of
+                  where swamp water draws on a corner, by which of its cells
+                  are open water - dithered in along LightBorne's shape like
+                  the shade overlays
   ow_props.png    every tree, bush, rock and reed, repacked on the 16px grid
   ow_props_wet.png  each prop's bottom tile row twice more, for roots that
                   spill onto water: with a foam line at the waterline, and
@@ -50,7 +58,7 @@ texture cut to LightBorne's shape, with LightBorne's outline pixels recoloured
 to two darker shades of that material. Every biome edge therefore has the
 same hand-drawn wobble, and no pack's mismatched edge art meets another's.
 
-FADES. Wetland, gravel, snow, drifts and swamp water have no corner tiles:
+FADES. Wetland, gravel, snow and drifts have no corner tiles:
 the renderer's shader draws them pixel by pixel, dithered by how much of
 each lies around a tile, so they blend across several tiles. Where land
 meets water it clips them to LightBorne's shapes and colours the outline.
@@ -376,16 +384,65 @@ def dist_to(region):
     return d.min(-1)
 
 
+def dashed_water(count, seed, tones):
+    """64x64 of open water with `count` short dashes, seamless (dashes wrap
+    round the edges and keep a 2 px margin from each other, so none merge).
+    `tones`: [(colour, share)] - each dash picks one by its share."""
+    n = 4 * T
+    a = np.zeros((n, n, 4), np.uint8)
+    a[:] = (0x4E, 0x91, 0xAF, 255)
+    rng = np.random.default_rng(seed)
+    taken = np.zeros((n, n), bool)
+    placed = 0
+    while placed < count:
+        x, y, length = int(rng.integers(0, n)), int(rng.integers(0, n)), int(rng.integers(2, 5))
+        xs = [(x + i) % n for i in range(length)]
+        near = [((y + dy) % n, (xx + dx) % n) for xx in xs for dy in (-2, -1, 0, 1, 2) for dx in (-2, 0, 2)]
+        if any(taken[p] for p in near):
+            continue
+        colour = tones[-1][0]
+        if len(tones) > 1:  # a single tone draws nothing, keeping the river's dashes
+            r = rng.random()
+            for c, share in tones:
+                if r < share:
+                    colour = c
+                    break
+                r -= share
+        for xx in xs:
+            a[y, xx] = (*hexrgb(colour), 255)
+            taken[y, xx] = True
+        placed += 1
+    return a
+
+
 def water_sheet():
-    """8 seamless open-water fills, five plain and three with one short light
-    dash - Pixel Crawler's ripples as they look on the palette. Dashes stay
-    off the tile edge, so any two variants tile seamlessly."""
-    base, light = (0x4E, 0x91, 0xAF, 255), (0x6E, 0xA7, 0xC6, 255)
-    dashes = {5: (3, 4, 3), 6: (9, 10, 2), 7: (5, 12, 4)}  # variant: (x, y, length)
-    a = np.zeros((T, 8 * T, 4), np.uint8)
-    a[:] = base
-    for v, (x, y, n) in dashes.items():
-        a[y, v * T + x:v * T + x + n] = light
+    """Still water: Pixel Crawler's ripples as they look on the palette, as
+    sparse as the old per-tile fills (about one dash in three tiles), one in
+    four of them a shade lighter."""
+    return dashed_water(6, 17, [("#91d6e8", 0.25), ("#6ea7c6", 0.75)])
+
+
+def swamp_water_sheet():
+    """Swamp water: the swamp fills laid 4 x 4 in a fixed shuffle. Their
+    flecks stay off the tile edges, so the square tiles with itself."""
+    fills = swamp_fills()
+    order = np.random.default_rng(41).permutation(16) % len(fills)
+    a = np.zeros((4 * T, 4 * T, 4), np.uint8)
+    for i, v in enumerate(order):
+        a[i // 4 * T:(i // 4 + 1) * T, i % 4 * T:(i % 4 + 1) * T] = fills[v]
+    return a
+
+
+def glints_sheet():
+    """A glint, three frames on 16px tiles: a light spark, a cross with a
+    white heart, the spark again. Centred at (7, 7)."""
+    spark, white = (*hexrgb("#91d6e8"), 255), (*hexrgb("#dfe3ed"), 255)
+    a = np.zeros((T, 3 * T, 4), np.uint8)
+    for f in (0, 2):
+        a[7, f * T + 7] = spark
+    a[7, T + 6:T + 9] = spark
+    a[6:9, T + 7] = spark
+    a[7, T + 7] = white
     return a
 
 
@@ -411,28 +468,10 @@ def swamp_fills():
 
 
 def river_sheet():
-    """64x64 of open water with light dashes, seamless (dashes wrap round the
-    edges). The renderer samples it by world position plus a scroll, so
-    neighbouring river tiles show one continuous surface."""
-    base, light = (0x4E, 0x91, 0xAF, 255), (0x6E, 0xA7, 0xC6, 255)
-    n = 4 * T
-    a = np.zeros((n, n, 4), np.uint8)
-    a[:] = base
-    rng = np.random.default_rng(31)
-    taken = np.zeros((n, n), bool)
-    placed = 0
-    while placed < 14:
-        x, y, length = int(rng.integers(0, n)), int(rng.integers(0, n)), int(rng.integers(2, 5))
-        xs = [(x + i) % n for i in range(length)]
-        # Keep dashes apart (a 2 px margin all round), so none merge.
-        near = [((y + dy) % n, (xx + dx) % n) for xx in xs for dy in (-2, -1, 0, 1, 2) for dx in (-2, 0, 2)]
-        if any(taken[p] for p in near):
-            continue
-        for xx in xs:
-            a[y, xx] = light
-            taken[y, xx] = True
-        placed += 1
-    return a
+    """Flowing water: the still water's dashes, denser so the motion reads.
+    The renderer samples it by world position plus a scroll, so neighbouring
+    river tiles show one continuous surface."""
+    return dashed_water(14, 31, [("#6ea7c6", 1.0)])
 
 
 def bank_row(lb, colours):
@@ -566,7 +605,10 @@ def fades_sheet(src, pal):
     lb = src["lb_tiles"]
     lb_body = lb_body_colours(lb)
     a = np.zeros(((len(FADES) + 1) * T, 16 * T, 4), np.uint8)
+    a[0:T] = swamp_masks(lb)
     for k, name in enumerate(FADES):
+        if name == "swamp":
+            continue
         fills = material_fills(src, name)
         for i in range(FADE_FILLS):
             a[k * T:(k + 1) * T, i * T:(i + 1) * T] = fills[i % len(fills)]
@@ -588,6 +630,25 @@ def fades_sheet(src, pal):
                     code = MASK_DARK if L < 0.45 else MASK_MID
                 a[y0 + y, mask * T + x] = (*hexrgb(code), 255)
     return a
+
+
+def swamp_masks(lb):
+    """Where swamp water draws on a dual-grid corner, by `open` - the corner's
+    open-water cells (TL=8 TR=4 BL=2 BR=1). Land counts with the swamp: the
+    bank covers it either way, and the swamp then reaches right to its shore.
+    Like a shade overlay, the swamp dithers out over SHADE_BAND px inward
+    from LightBorne's shape. Column 15 (all open water) stays clear."""
+    yy, xx = np.mgrid[0:T, 0:T]
+    row = np.zeros((T, 16 * T, 4), np.uint8)
+    for open_ in range(15):
+        if open_ == 0:
+            d = np.full((T, T), 99.0)
+        else:
+            c, r = LB_CORNERS[15 - open_]
+            d = dist_to(tile(lb, c, r)[..., 3] == 0)
+        keep = BAYER4[yy % 4, xx % 4] < np.clip(d / SHADE_BAND, 0, 1) * 16
+        row[:, open_ * T:(open_ + 1) * T][keep] = (*hexrgb(MASK_BODY), 255)
+    return row
 
 
 def recolour(a, mapping):
@@ -785,6 +846,8 @@ def main():
     assets = os.path.join(ROOT, "assets")
     save(water_sheet(), os.path.join(assets, "ow_water.png"))
     save(river_sheet(), os.path.join(assets, "ow_river.png"))
+    save(swamp_water_sheet(), os.path.join(assets, "ow_swamp_water.png"))
+    save(glints_sheet(), os.path.join(assets, "ow_glints.png"))
     save(src["coast"], os.path.join(assets, "ow_coast.png"))
     save(terrain_sheet(src, pal), os.path.join(assets, "ow_terrain.png"))
     save(shades_sheet(src, pal), os.path.join(assets, "ow_shades.png"))

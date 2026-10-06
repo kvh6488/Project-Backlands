@@ -4,6 +4,7 @@
 #include "world/generators/poisson.hpp"
 #include "world/noise.hpp"
 #include "world/overworld.hpp"
+#include "world/shoreline.hpp"
 #include <gtest/gtest.h>
 #include <cmath>
 #include <memory>
@@ -189,6 +190,78 @@ TEST(IslandTest, NoOpenLakeSitsInAMarsh) {
   for (size_t id = 0; id < bank.size(); ++id)
     if (bank[id] >= 20)
       EXPECT_LE(2 * wet[id], bank[id]) << "lake " << id;
+}
+
+TEST(IslandTest, SwampsKeepToTheirInlandBand) {
+  // Each swamp lake's mean distance from the sea lies 15-25 % of the way to
+  // the island's most inland point.
+  const IslandMap &m = sharedWorld().island().map();
+  const size_t lakes = m.lakeSwamp.size();
+  std::vector<float> sum(lakes, 0.0f);
+  std::vector<int> cells(lakes, 0);
+  float deepest = 0.0f;
+  for (int c = 0; c < m.n * m.n; ++c) {
+    if (!m.ocean[c])
+      deepest = std::max(deepest, m.oceanDist[c]);
+    if (m.lake[c] >= 0) {
+      sum[m.lake[c]] += m.oceanDist[c];
+      cells[m.lake[c]]++;
+    }
+  }
+  int swamps = 0;
+  for (size_t id = 0; id < lakes; ++id) {
+    if (!m.lakeSwamp[id])
+      continue;
+    ++swamps;
+    const float f = sum[id] / cells[id] / deepest;
+    EXPECT_GE(f, island::kSwampBandFrom) << "lake " << id;
+    EXPECT_LE(f, island::kSwampBandTo) << "lake " << id;
+  }
+  EXPECT_GE(swamps, 1);
+}
+
+TEST(OverworldTest, ShoreHasNoNubsOrCornerJoins) {
+  // No land tile with water on 3+ sides or on two opposite sides, and no
+  // water tiles that meet only at a corner - over a lake-and-river country.
+  const Overworld &w = sharedWorld();
+  auto wet = [&](int x, int y) { return isWater(w.biomeAt(x, y)); };
+  for (int y = 600; y < 1100; ++y)
+    for (int x = 1400; x < 1900; ++x) {
+      const bool a = wet(x, y), b = wet(x + 1, y), c = wet(x, y + 1), d = wet(x + 1, y + 1);
+      ASSERT_FALSE((a && d && !b && !c) || (b && c && !a && !d)) << x << "," << y;
+      if (a)
+        continue;
+      const bool n = wet(x, y - 1), e = b, s = c, west = wet(x - 1, y);
+      ASSERT_LT(n + e + s + west, 3) << x << "," << y;
+      ASSERT_FALSE((n && s) || (e && west)) << x << "," << y;
+    }
+}
+
+TEST(OverworldTest, ShoreTidyIsExactInsideItsApron) {
+  // A chunk is tidied with a kPasses-tile apron; its core must match the
+  // whole grid tidied at once, or chunks would disagree at their borders.
+  const Island &isl = sharedWorld().island();
+  constexpr int A = shoreline::kPasses, W = 120, x0 = 1640, y0 = 800;
+  std::vector<TileSample> whole(W * W);
+  for (int y = 0; y < W; ++y)
+    for (int x = 0; x < W; ++x)
+      whole[y * W + x] = isl.sample(x0 + x, y0 + y);
+  std::vector<TileSample> tidied = whole;
+  shoreline::tidy(tidied, W, W);
+  constexpr int cx = 40, cy = 40, n = 32, P = n + 2 * A;
+  std::vector<TileSample> part(P * P);
+  for (int y = 0; y < P; ++y)
+    for (int x = 0; x < P; ++x)
+      part[y * P + x] = whole[(cy - A + y) * W + (cx - A + x)];
+  shoreline::tidy(part, P, P);
+  int changedTiles = 0;
+  for (int y = 0; y < n; ++y)
+    for (int x = 0; x < n; ++x) {
+      const Biome got = part[(y + A) * P + (x + A)].biome;
+      ASSERT_EQ(got, tidied[(cy + y) * W + (cx + x)].biome) << x << "," << y;
+      changedTiles += got != whole[(cy + y) * W + (cx + x)].biome;
+    }
+  EXPECT_GT(changedTiles, 0) << "the window should hold something to tidy";
 }
 
 TEST(IslandTest, OnlyRiversFlowAndTheyFlowDownstream) {
@@ -505,26 +578,6 @@ TEST(OverworldRendererTest, FadeShareRampsAcrossABorder) {
     count[y * 12 + 4] = 0;
   OverworldRenderer::shareWithin(leftHalf(), count, 12, 5, 2, s);
   EXPECT_FLOAT_EQ(s[row + 5], 0.5f);
-}
-
-TEST(OverworldRendererTest, SwampRampDoesNotJumpLand) {
-  // Open: the same ramp a box filter gives across a straight border.
-  std::vector<uint8_t> water(12 * 5, 1);
-  std::vector<float> r;
-  OverworldRenderer::rampThrough(leftHalf(), water, 12, 5, 2, r);
-  const int row = 2 * 12;
-  EXPECT_FLOAT_EQ(r[row + 3], 1.0f);
-  EXPECT_FLOAT_EQ(r[row + 5], 0.6f);
-  EXPECT_FLOAT_EQ(r[row + 6], 0.4f);
-  EXPECT_FLOAT_EQ(r[row + 8], 0.0f);
-
-  // A two-column strip of land between them: neither side sees the other.
-  for (int y = 0; y < 5; ++y)
-    water[y * 12 + 6] = water[y * 12 + 7] = 0;
-  OverworldRenderer::rampThrough(leftHalf(), water, 12, 5, 2, r);
-  EXPECT_FLOAT_EQ(r[row + 5], 1.0f);
-  EXPECT_FLOAT_EQ(r[row + 8], 0.0f);
-  EXPECT_FLOAT_EQ(r[row + 6], 1.0f); // land beside the swamp only takes the swamp
 }
 
 TEST(OverworldRendererTest, SpriteFramesDoNotOverlapInTheAtlas) {

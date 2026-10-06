@@ -1,6 +1,7 @@
 #include "world/overworld.hpp"
 #include "core/grid.hpp"
 #include "world/generators/poisson.hpp"
+#include "world/shoreline.hpp"
 #include <cstdlib>
 #include <deque>
 
@@ -71,9 +72,17 @@ Overworld::Chunk Overworld::build(int cx, int cy) const {
   cy = (cy % m_chunksAcross + m_chunksAcross) % m_chunksAcross;
   Chunk c;
   const int ox = cx * kChunk, oy = cy * kChunk;
+  // Sampled with an apron as wide as the shore tidy reads, so the tidied
+  // core matches every neighbour's (shoreline.hpp).
+  constexpr int A = shoreline::kPasses, W = kChunk + 2 * A;
+  std::vector<TileSample> tiles((size_t)W * W);
+  for (int y = 0; y < W; ++y)
+    for (int x = 0; x < W; ++x)
+      tiles[y * W + x] = m_island.sample(ox + x - A, oy + y - A);
+  shoreline::tidy(tiles, W, W);
   for (int y = 0; y < kChunk; ++y) {
     for (int x = 0; x < kChunk; ++x) {
-      TileSample s = m_island.sample(ox + x, oy + y);
+      const TileSample &s = tiles[(y + A) * W + (x + A)];
       c.biome[y * kChunk + x] = s.biome;
       c.height[y * kChunk + x] = s.height;
       c.shade[y * kChunk + x] = s.shade;

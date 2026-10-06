@@ -85,15 +85,17 @@ struct IslandMap {
 //               where two meet they merge. A river into a lake continues
 //               from the lake's outlet, because the lake's whole inflow
 //               leaves through it.                                     O(N)
-//   8. Swamps   About 1 in 3 of the low, warm lakes (at least one per
-//               island) become swamps. So does any lake most of whose shore
+//   8. Swamps   About 1 in 3 of the low, warm lakes 15-25 % of the way
+//               inland (at least one per island) become swamps. So does any
+//               lake in that band most of whose shore
 //               lies in a swamp's wet halo, repeated until none joins - so
 //               swamps come as regions, and no open lake sits in a marsh. Then
 //               every river cell within kSwampRiverReach steps of a swamp
 //               lake along the flow, up- or downstream.  O(N * passes + reach)
 //   9. Distance Euclidean distance to the nearest water (moisture bonus),
-//               ocean (beach width) and swamp water (the wetland around a
-//               swamp), by nearest-source propagation.             ~O(N)
+//               ocean (beach width, and the swamp band - so this runs before
+//               step 8) and swamp water (the wetland around a swamp), by
+//               nearest-source propagation.                         ~O(N)
 //
 // N = n^2 coarse cells. ~150k at the default size, well under a second.
 // ============================================================================
@@ -106,6 +108,9 @@ inline constexpr float kRiverFlow = 160.0f; // ~10k tiles of catchment
 inline constexpr float kPitDepth = 0.002f;  // fill below this is a flat, not a pit
 inline constexpr float kSwampMinTemperature = 0.55f; // warm lowland lakes only
 inline constexpr float kSwampChance = 0.35f;
+// Swamps only form between these shares of the way inland (0 the coast,
+// 1 the point furthest from the sea).
+inline constexpr float kSwampBandFrom = 0.15f, kSwampBandTo = 0.25f;
 inline constexpr int kSwampRiverReach = 6; // coarse cells (~48 tiles)
 
 // Land moisture: the field's noise, raised near water and raised further,
