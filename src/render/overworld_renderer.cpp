@@ -69,7 +69,7 @@ constexpr float kFlowSpeed = 6.0f;
 constexpr float kSwayPx = 1.5f, kSwaySeconds = 5.0f;
 // A glint: on this share of open-water tiles, each flashing once per cycle
 // at a moment of its own, for its 3 frames (assets/ow_glints.png).
-constexpr uint32_t kGlintPerMille = 40;
+constexpr uint32_t kGlintPerMille = 28;
 constexpr float kGlintCycle = 3.0f, kGlintFrameSeconds = 0.12f;
 constexpr int kGlintFrames = 3;
 

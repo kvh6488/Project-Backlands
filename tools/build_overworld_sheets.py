@@ -401,7 +401,7 @@ def dashed_water(count, seed, tones):
         if any(taken[p] for p in near):
             continue
         colour = tones[-1][0]
-        if len(tones) > 1:  # a single tone draws nothing, keeping the river's dashes
+        if len(tones) > 1:  # one tone needs no roll
             r = rng.random()
             for c, share in tones:
                 if r < share:
@@ -468,10 +468,10 @@ def swamp_fills():
 
 
 def river_sheet():
-    """Flowing water: the still water's dashes, denser so the motion reads.
-    The renderer samples it by world position plus a scroll, so neighbouring
-    river tiles show one continuous surface."""
-    return dashed_water(14, 31, [("#6ea7c6", 1.0)])
+    """Flowing water: the still water's dashes and tones, denser so the
+    motion reads. The renderer samples it by world position plus a scroll, so
+    neighbouring river tiles show one continuous surface."""
+    return dashed_water(14, 31, [("#91d6e8", 0.25), ("#6ea7c6", 0.75)])
 
 
 def bank_row(lb, colours):
