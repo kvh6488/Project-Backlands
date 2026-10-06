@@ -449,6 +449,55 @@ TEST(OverworldRendererTest, GroundDetailsAreFlatDecalsAtAModestDensity) {
   EXPECT_EQ(OverworldRenderer::decalFor(Biome::OCEAN, 0, 0), owsprite::COUNT);
 }
 
+// A 12 x 5 grid split at x = 6: `in` to the left.
+static std::vector<uint8_t> leftHalf() {
+  std::vector<uint8_t> v(12 * 5);
+  for (int k = 0; k < (int)v.size(); ++k)
+    v[k] = k % 12 < 6;
+  return v;
+}
+
+TEST(OverworldRendererTest, FadeShareRampsAcrossABorder) {
+  std::vector<uint8_t> all(12 * 5, 1);
+  std::vector<float> s;
+  OverworldRenderer::shareWithin(leftHalf(), all, 12, 5, 2, s);
+  const int row = 2 * 12;
+  EXPECT_FLOAT_EQ(s[row + 2], 1.0f);
+  EXPECT_FLOAT_EQ(s[row + 5], 0.6f); // 3 of the 5 columns in reach are in
+  EXPECT_FLOAT_EQ(s[row + 6], 0.4f);
+  EXPECT_FLOAT_EQ(s[row + 9], 0.0f);
+  for (int x = 1; x < 12; ++x)
+    EXPECT_LE(s[row + x], s[row + x - 1]);
+
+  // Cells that do not count are left out of the share, so a shore does not
+  // thin a fade: with column 4 uncounted, column 5 sees 2 in of 4 counted.
+  std::vector<uint8_t> count = all;
+  for (int y = 0; y < 5; ++y)
+    count[y * 12 + 4] = 0;
+  OverworldRenderer::shareWithin(leftHalf(), count, 12, 5, 2, s);
+  EXPECT_FLOAT_EQ(s[row + 5], 0.5f);
+}
+
+TEST(OverworldRendererTest, SwampRampDoesNotJumpLand) {
+  // Open: the same ramp a box filter gives across a straight border.
+  std::vector<uint8_t> water(12 * 5, 1);
+  std::vector<float> r;
+  OverworldRenderer::rampThrough(leftHalf(), water, 12, 5, 2, r);
+  const int row = 2 * 12;
+  EXPECT_FLOAT_EQ(r[row + 3], 1.0f);
+  EXPECT_FLOAT_EQ(r[row + 5], 0.6f);
+  EXPECT_FLOAT_EQ(r[row + 6], 0.4f);
+  EXPECT_FLOAT_EQ(r[row + 8], 0.0f);
+
+  // A two-column strip of land between them: neither side sees the other.
+  for (int y = 0; y < 5; ++y)
+    water[y * 12 + 6] = water[y * 12 + 7] = 0;
+  OverworldRenderer::rampThrough(leftHalf(), water, 12, 5, 2, r);
+  EXPECT_FLOAT_EQ(r[row + 5], 1.0f);
+  EXPECT_FLOAT_EQ(r[row + 8], 0.0f);
+  EXPECT_FLOAT_EQ(r[row + 6], 1.0f); // land beside the swamp only takes the swamp
+}
+
 TEST(OverworldRendererTest, SpriteFramesDoNotOverlapInTheAtlas) {
   using owsprite::kFrames;
   for (int i = 0; i < owsprite::COUNT; ++i) {

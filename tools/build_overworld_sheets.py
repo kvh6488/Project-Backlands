@@ -15,18 +15,24 @@ OKLab), after two recorded edits: High Tides' flat sea is cut out of the coast
 (our water shows through), and Pixel Crawler's red pine is recoloured rust.
 
 Outputs, all the renderer loads:
-  ow_water.png    generated water: row 0 open water (8 fills, three with a
-                  dash), row 1 swamp water fills, row 2 swamp water's 16
-                  corner tiles (a dithered edge, so it fades into open water)
+  ow_water.png    generated still water: 8 fills, three with a dash
   ow_river.png    flowing water: one 64px square that tiles with itself, which
                   the renderer scrolls downstream (dashes a little denser than
                   still water's, so the motion reads)
   ow_coast.png    High Tides' sand coast: lake + island blocks, 3 foam frames
-  ow_shades.png   shade overlays (grass -> forest floor, snow drifts): 81
-                  tiles per row, one per 3-state corner combination, + fills
-  ow_terrain.png  one row per inland material: the 16 corner tiles + fills,
-                  and a generated mud BANK row: LightBorne's shapes grown 4 px
-                  into the water, the lip a lake or river shows past the grass
+  ow_shades.png   shade overlays (grass -> meadow -> forest floor): 81 tiles
+                  per row, one per 3-state corner combination, + fills
+  ow_terrain.png  grass (the 16 corner tiles + fills), sand fills, and three
+                  generated mud BANK rows: LightBorne's shapes grown 4 px into
+                  the water, the lip a lake or river shows past the grass -
+                  plain mud, then a third and two thirds sand, for banks
+                  running into a beach
+  ow_fades.png    the FADE materials the renderer's shader draws: one row
+                  each (swamp water, wetland, gravel, snow, snow drift) of 8
+                  fills, then the material's two outline colours as pixels
+                  (x = 128, 129); and a last row of LightBorne's 16 corner
+                  shapes coded body / mid outline / dark outline, which the
+                  shader clips land materials to
   ow_props.png    every tree, bush, rock and reed, repacked on the 16px grid
   ow_props_wet.png  each prop's bottom tile row twice more, for roots that
                   spill onto water: with a foam line at the waterline, and
@@ -43,6 +49,11 @@ MASKS for every material: a transition tile is the material's own fill
 texture cut to LightBorne's shape, with LightBorne's outline pixels recoloured
 to two darker shades of that material. Every biome edge therefore has the
 same hand-drawn wobble, and no pack's mismatched edge art meets another's.
+
+FADES. Wetland, gravel, snow, drifts and swamp water have no corner tiles:
+the renderer's shader draws them pixel by pixel, dithered by how much of
+each lies around a tile, so they blend across several tiles. Where land
+meets water it clips them to LightBorne's shapes and colours the outline.
 
 SHADE OVERLAYS. A shade sits on a base material (forest floor on grass) and
 fades out over a dithered band. Its corners have THREE states - not on the
@@ -114,7 +125,7 @@ LB_CORNERS = {14: (0, 0), 12: (1, 0), 13: (2, 0), 8: (3, 0), 4: (4, 0),
 # colours is grass body, anything else is outline.
 LB_BODY = [(c, r) for c in range(11, 20) for r in range(3)]
 
-# Row order is the renderer's TerrainMaterial order. Fills are (sheet, col, row).
+# Where each material's fill tiles come from: (sheet, col, row).
 MATERIALS = [
     ("grass",   [("floors", 1, 10), ("floors", 2, 10), ("floors", 3, 10)]),
     ("wetland", [("swamp", 3, 1)]),
@@ -122,20 +133,31 @@ MATERIALS = [
     ("snow",    []),  # generated: snow_fills
     ("sand",    [("beach", 1, 1), ("beach", 2, 1), ("beach", 1, 2), ("beach", 2, 2)]),  # fills only: the coast is its edge
 ]
+TERRAIN = ["grass", "sand"]  # ow_terrain.png rows, then the bank rows
+FADES = ["swamp", "wetland", "gravel", "snow", "drift"]  # ow_fades.png rows
+FADE_FILLS = 8
+# The bank rows' colours, mud first and then two steps toward the sand:
+# (lip, lip shadow, wet line at the waterline).
+BANK_STEPS = [("#7d4c2e", "#663b27", "#4a2a19"),
+              ("#936340", "#7d4c2e", "#663b27"),
+              ("#cc9770", "#b17a4e", "#936340")]
 FILL_COL = 16      # fills start here; columns 0-15 are the corner masks
 FILLS_PER_ROW = 4  # fewer fills repeat
 
 # Shade overlays (ow_shades.png), one row each, drawn over their base
 # material where Island::sample's shade says so. Each is the base's fills
 # recoloured: grass fades to forest floor in three steps (#55834c and
-# #53763e were added to the palette for them), snow gets grey drifts. Row
-# order is the renderer's shade-overlay order.
+# #53763e were added to the palette for them). Row order is the renderer's
+# shade-overlay order.
 SHADES = [
     ("meadow",      "grass", {"#3d7f41": "#55834c"}),
     ("forest",      "grass", {"#3d7f41": "#6a8657", "#3c6723": "#53763e"}),
     ("forest_deep", "grass", {"#3d7f41": "#53763e"}),
-    ("drift",       "snow",  {"#dfe3ed": "#d9d9da", "#d9d9da": "#bdd5de", "#bdd5de": "#a6b7c6"}),
 ]
+# Snow drifts: snow's fills recoloured grey, a fade material of their own.
+DRIFT = {"#dfe3ed": "#d9d9da", "#d9d9da": "#bdd5de", "#bdd5de": "#a6b7c6"}
+# The fade sheet's corner shapes, coded in palette colours by red channel.
+MASK_BODY, MASK_MID, MASK_DARK = "#dfe3ed", "#7e7e7e", "#141517"
 SHADE_BAND = 6.0  # px over which an overlay dithers out
 
 # ---- props -----------------------------------------------------------------
@@ -340,13 +362,6 @@ def tile(a, col, row):
 BAYER4 = np.array([[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]])
 
 
-def quadrant_in(mask):
-    """16x16 bools: is each pixel in a cell the dual tile's mask includes."""
-    yy, xx = np.mgrid[0:T, 0:T]
-    bit = np.where(yy < T // 2, np.where(xx < T // 2, 8, 4), np.where(xx < T // 2, 2, 1))
-    return (bit & mask) != 0
-
-
 def dist_to(region):
     """Per pixel, the Euclidean distance (px) to the nearest pixel of
     `region` inside the tile; large where region is empty."""
@@ -359,21 +374,20 @@ def dist_to(region):
 
 
 def water_sheet():
-    """Row 0: 8 seamless open-water fills, five plain and three with one short
-    light dash - Pixel Crawler's ripples as they look on the palette. Dashes
-    stay off the tile edge, so any two variants tile seamlessly.
-    Row 1: swamp water - murky grey-green, flecked with duckweed.
-    Row 2: swamp water's corner tiles. Cell boundaries in a dual tile only run
-    along its middle lines, so in-tile distances are exact; the edge thins out
-    over 4 px by an ordered (Bayer) dither, which keeps the pattern aligned
-    across tiles because every tile origin is a multiple of 4."""
+    """8 seamless open-water fills, five plain and three with one short light
+    dash - Pixel Crawler's ripples as they look on the palette. Dashes stay
+    off the tile edge, so any two variants tile seamlessly."""
     base, light = (0x4E, 0x91, 0xAF, 255), (0x6E, 0xA7, 0xC6, 255)
     dashes = {5: (3, 4, 3), 6: (9, 10, 2), 7: (5, 12, 4)}  # variant: (x, y, length)
-    a = np.zeros((3 * T, 16 * T, 4), np.uint8)
-    a[0:T, 0:8 * T] = base
+    a = np.zeros((T, 8 * T, 4), np.uint8)
+    a[:] = base
     for v, (x, y, n) in dashes.items():
         a[y, v * T + x:v * T + x + n] = light
+    return a
 
+
+def swamp_fills():
+    """Swamp water: murky grey-green, flecked with duckweed."""
     murk, weed, weed_lit, ripple = (0x41, 0x56, 0x4B), (0x3D, 0x7F, 0x41), (0x6A, 0x86, 0x57), (0x57, 0x64, 0x77)
     rng = np.random.default_rng(7)
     fills = []
@@ -390,17 +404,7 @@ def water_sheet():
             x, y = rng.integers(2, T - 6), rng.integers(3, T - 3)
             f[y, x:x + 3, :3] = ripple
         fills.append(f)
-        a[T:2 * T, v * T:(v + 1) * T] = f
-    band = 4.0
-    for mask in range(1, 15):
-        inside = quadrant_in(mask)
-        d = dist_to(~inside)
-        yy, xx = np.mgrid[0:T, 0:T]
-        keep = inside & (BAYER4[yy % 4, xx % 4] < np.clip(d / band, 0, 1) * 16)
-        t = fills[mask % 8].copy()
-        t[~keep] = 0
-        a[2 * T:3 * T, mask * T:(mask + 1) * T] = t
-    return a
+    return fills
 
 
 def river_sheet():
@@ -428,13 +432,15 @@ def river_sheet():
     return a
 
 
-def bank_row(lb):
+def bank_row(lb, colours):
     """Mud bank: each LightBorne corner shape grown 4 px into the water. The
     grass drawn over it hides the original shape, so what shows is the lip:
     three px of mud and one of dark wet mud at the waterline. Fills are mud
-    too (seen only where nothing covers them)."""
-    mud, mud_dark, wet = (0x7D, 0x4C, 0x2E), (0x66, 0x3B, 0x27), (0x4A, 0x2A, 0x19)
+    too (seen only where nothing covers them). `colours` is one BANK_STEPS
+    entry: the paler ones are for banks near a beach, so mud fades into the
+    sandy coast."""
     rng = np.random.default_rng(11)
+    mud, mud_dark, wet = (hexrgb(h) for h in colours)
     row = np.zeros((T, (FILL_COL + FILLS_PER_ROW) * T, 4), np.uint8)
     fill = np.zeros((T, T, 4), np.uint8)
     fill[:] = (*mud, 255)
@@ -468,9 +474,14 @@ def hexrgb(h):
 
 
 def material_fills(src, name):
-    """A material's fill tiles. Snow is generated (see snow_fills)."""
+    """A material's fill tiles. Snow and swamp water are generated, drifts
+    are snow recoloured."""
     if name == "snow":
         return snow_fills()
+    if name == "swamp":
+        return swamp_fills()
+    if name == "drift":
+        return [recolour(f, DRIFT) for f in snow_fills()]
     return [tile(src[s], c, r) for s, c, r in dict(MATERIALS)[name]]
 
 
@@ -529,7 +540,7 @@ def terrain_sheet(src, pal):
     lb = src["lb_tiles"]
     lb_body = lb_body_colours(lb)
     rows = []
-    for name, _ in MATERIALS:
+    for name in TERRAIN:
         row = np.zeros((T, (FILL_COL + FILLS_PER_ROW) * T, 4), np.uint8)
         fill_tiles = material_fills(src, name)
         for i in range(FILLS_PER_ROW):
@@ -540,8 +551,40 @@ def terrain_sheet(src, pal):
             for mask, (c, r) in LB_CORNERS.items():
                 row[:, mask * T:(mask + 1) * T] = outline_tile(tile(lb, c, r), fill_tiles[0], shades, lb_body)
         rows.append(row)
-    rows.append(bank_row(lb))
+    rows += [bank_row(lb, c) for c in BANK_STEPS]
     return np.concatenate(rows, axis=0)
+
+
+def fades_sheet(src, pal):
+    """One row per fade material: FADE_FILLS fills (cycled where the source
+    has fewer), then its two outline colours as pixels (dark at x = 128, mid
+    at x = 129). Last row: LightBorne's 16 corner shapes, each pixel coded
+    by red - body, mid outline, dark outline - or clear."""
+    lb = src["lb_tiles"]
+    lb_body = lb_body_colours(lb)
+    a = np.zeros(((len(FADES) + 1) * T, 16 * T, 4), np.uint8)
+    for k, name in enumerate(FADES):
+        fills = material_fills(src, name)
+        for i in range(FADE_FILLS):
+            a[k * T:(k + 1) * T, i * T:(i + 1) * T] = fills[i % len(fills)]
+        dark, mid = outline_shades(fills[0], pal)
+        a[k * T, 8 * T] = (*dark, 255)
+        a[k * T, 8 * T + 1] = (*mid, 255)
+    y0 = len(FADES) * T
+    a[y0:y0 + T, 15 * T:16 * T] = (*hexrgb(MASK_BODY), 255)
+    for mask, (c, r) in LB_CORNERS.items():
+        m = tile(lb, c, r)
+        for y in range(T):
+            for x in range(T):
+                if m[y, x, 3] == 0:
+                    continue
+                if tuple(m[y, x, :3]) in lb_body:
+                    code = MASK_BODY
+                else:
+                    L = srgb_to_oklab(m[y, x, :3][None].astype(np.uint8))[0, 0]
+                    code = MASK_DARK if L < 0.45 else MASK_MID
+                a[y0 + y, mask * T + x] = (*hexrgb(code), 255)
+    return a
 
 
 def recolour(a, mapping):
@@ -739,6 +782,7 @@ def main():
     save(src["coast"], os.path.join(assets, "ow_coast.png"))
     save(terrain_sheet(src, pal), os.path.join(assets, "ow_terrain.png"))
     save(shades_sheet(src, pal), os.path.join(assets, "ow_shades.png"))
+    save(fades_sheet(src, pal), os.path.join(assets, "ow_fades.png"))
     atlas, wet, frames = props_atlas(src)
     save(atlas, os.path.join(assets, "ow_props.png"))
     save(wet, os.path.join(assets, "ow_props_wet.png"))
