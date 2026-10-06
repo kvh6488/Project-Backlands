@@ -23,8 +23,11 @@ const Overworld::Chunk &Overworld::chunk(int cx, int cy) const {
 }
 
 // Density rolls per biome: (prop, chance) pairs tried in order against one
-// uniform number, so the chances partition [0, 1).
-PropType Overworld::rollProp(Biome b, int x, int y, uint8_t &variant) const {
+// uniform number, so the chances partition [0, 1). The shade steps between
+// grassland and forest have their own rows, so the woods thin out gradually
+// instead of starting at a wall of trees.
+PropType Overworld::rollProp(Biome b, uint8_t shade, int x, int y,
+                             uint8_t &variant) const {
   struct Odds {
     PropType type;
     float chance;
@@ -43,10 +46,19 @@ PropType Overworld::rollProp(Biome b, int x, int y, uint8_t &variant) const {
       /* MOUNTAIN  */ {{PropType::ROCK, 0.16f}, {PropType::PINE, 0.08f}},
       /* SNOW      */ {{PropType::PINE, 0.04f}, {PropType::ROCK, 0.04f}},
   };
+  static const std::vector<Odds> kMeadowEdge = {
+      {PropType::TREE, 0.22f}, {PropType::BUSH, 0.12f}, {PropType::ROCK, 0.02f}};
+  static const std::vector<Odds> kForestEdge = {{PropType::TREE, 0.45f},
+                                                {PropType::BUSH, 0.12f}};
+  const std::vector<Odds> *odds = &kTable[(int)b];
+  if (b == Biome::GRASSLAND && shade == 1)
+    odds = &kMeadowEdge;
+  else if (b == Biome::FOREST && shade == 2)
+    odds = &kForestEdge;
   uint32_t seed = m_island.seed();
   float roll = noise::unit(x, y, seed ^ 0x7a3e11c5u);
   variant = (uint8_t)(noise::hash(x, y, seed ^ 0x1b873593u) & 0xffu);
-  for (const Odds &o : kTable[(int)b]) {
+  for (const Odds &o : *odds) {
     if (roll < o.chance)
       return o.type;
     roll -= o.chance;
@@ -64,6 +76,7 @@ Overworld::Chunk Overworld::build(int cx, int cy) const {
       TileSample s = m_island.sample(ox + x, oy + y);
       c.biome[y * kChunk + x] = s.biome;
       c.height[y * kChunk + x] = s.height;
+      c.shade[y * kChunk + x] = s.shade;
     }
   }
   c.propIndex.fill(-1);
@@ -108,7 +121,8 @@ Overworld::Chunk Overworld::build(int cx, int cy) const {
         std::abs(ty - sy) <= kSpawnClearance)
       continue;
     uint8_t variant = 0;
-    PropType type = rollProp(c.biome[ly * kChunk + lx], tx, ty, variant);
+    PropType type = rollProp(c.biome[ly * kChunk + lx], c.shade[ly * kChunk + lx],
+                             tx, ty, variant);
     if (type == PropType::NONE)
       continue;
     c.propIndex[ly * kChunk + lx] = (int16_t)c.props.size();
@@ -147,6 +161,13 @@ float Overworld::heightAt(int x, int y) const {
   y = wrapY(y);
   const Chunk &c = chunk(x / kChunk, y / kChunk);
   return c.height[(y % kChunk) * kChunk + (x % kChunk)];
+}
+
+uint8_t Overworld::shadeAt(int x, int y) const {
+  x = wrapX(x);
+  y = wrapY(y);
+  const Chunk &c = chunk(x / kChunk, y / kChunk);
+  return c.shade[(y % kChunk) * kChunk + (x % kChunk)];
 }
 
 const Prop *Overworld::findProp(int x, int y) const {

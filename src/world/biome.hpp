@@ -68,6 +68,12 @@ inline constexpr Biome kWhittaker[3][4] = {
     {Biome::GRASSLAND, Biome::GRASSLAND, Biome::FOREST, Biome::WETLAND},
 };
 
+// The moisture where land turns from grassland to forest, at a temperature;
+// the shade of the ground (Island::sample) fades either side of it.
+inline float forestMoisture(float temperature) {
+  return temperature < 0.35f ? 0.45f : 0.58f;
+}
+
 inline Biome whittaker(float temperature, float moisture) {
   int t = temperature < 0.35f ? 0 : temperature < 0.6f ? 1 : 2;
   int m = moisture < 0.45f ? 0 : moisture < 0.58f ? 1 : moisture < 0.8f ? 2 : 3;

@@ -102,6 +102,18 @@ TileSample Island::sample(int x, int y) const {
       0.25f * noise::gradient(px / 11.0f, py / 11.0f, m_seed ^ 0x5a4d1u);
   out.biome = biome::classifyLand(out.height, out.temperature, out.moisture,
                                   oceanDist < beachReach);
+  if (out.biome == Biome::GRASSLAND || out.biome == Biome::FOREST) {
+    // The jitter roughens the step contours, which on broad moisture noise
+    // would otherwise be long smooth curves.
+    float margin = out.moisture - biome::forestMoisture(out.temperature) +
+                   0.02f * noise::gradient(px / 6.0f, py / 6.0f, m_seed ^ 0x5ade1u);
+    out.shade = out.biome == Biome::GRASSLAND ? (margin > kMeadowMargin ? 1 : 0)
+                                              : (margin > kDeepForestMargin ? 3 : 2);
+  } else if (out.biome == Biome::SNOW) {
+    float drift = noise::gradient(px / 19.0f, py / 13.0f, m_seed ^ 0xd51f7u) +
+                  0.4f * noise::gradient(px / 6.0f, py / 5.0f, m_seed ^ 0x2f00du);
+    out.shade = drift > 0.12f ? 1 : 0;
+  }
   return out;
 }
 

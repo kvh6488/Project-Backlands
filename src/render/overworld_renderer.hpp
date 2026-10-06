@@ -15,9 +15,12 @@
 // with the player by base Y.
 //
 // TERRAIN: LAYERS ON A DUAL GRID. The ground is a stack of materials, drawn
-// bottom to top: water everywhere, then sand on all land, grass on all land
-// but beaches, then one overlay per biome (forest floor, wetland, gravel,
-// snow). Each land layer is autotiled on the DUAL grid: its tiles sit on the
+// bottom to top: water everywhere (swamp water over open water), then
+// ground on all land (sand, or a mud bank on lakes and rivers), grass on all
+// land but beaches, then one overlay per biome (wetland, gravel, snow).
+// Grass fades into forest floor, and snow gains drifts, through SHADE
+// OVERLAYS: recoloured copies of the base that dither out over a few pixels,
+// placed by the tile's shade step (TileSample::shade). Each land layer is autotiled on the DUAL grid: its tiles sit on the
 // cell CORNERS, half a cell off the world grid, and each one shows the four
 // cells that meet there. Four in/out bits give 16 shapes (cornerMask) - the
 // "corner" or "Wang" tile set - against 47 for the blob sets that tile per
@@ -86,11 +89,15 @@ public:
 private:
   void drawLayer(int layer, int x0, int y0, int w, int h, int frame) const;
 
-  Texture2D m_water{}, m_coast{}, m_terrain{}, m_props{};
+  Texture2D m_water{}, m_coast{}, m_terrain{}, m_shades{}, m_props{};
   const Overworld *m_world = nullptr;
   Vector2 m_focus{};
-  // Biomes of the cells around the view, (w+2) x (h+2), rebuilt per frame so
-  // each layer's corner lookups are array reads rather than chunk queries.
-  std::vector<Biome> m_cells;
+  // The cells around the view, (w+2) x (h+2), rebuilt per frame so each
+  // layer's corner lookups are array reads rather than chunk queries.
+  struct Cell {
+    Biome biome;
+    uint8_t shade;
+  };
+  std::vector<Cell> m_cells;
   int m_cellsW = 0;
 };

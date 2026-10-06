@@ -18,27 +18,48 @@ namespace {
 //
 // SWAMP_WATER sits on the open water. GROUND is all land: its edge is the
 // sand-and-foam coast where the ocean is, a mud bank on lakes and rivers.
-enum Layer { SWAMP_WATER, GROUND, GRASS, FOREST, WETLAND, GRAVEL, SNOW, LAYER_COUNT };
+// MEADOW and FOREST are SHADE OVERLAYS on grass, DRIFT on snow: the ground
+// fading by the tile's shade step (TileSample::shade). Deep forest (shade 3)
+// draws as forest; the step only thickens the trees.
+enum Layer {
+  SWAMP_WATER, GROUND, GRASS, MEADOW, FOREST, WETLAND, GRAVEL, SNOW, DRIFT,
+  LAYER_COUNT
+};
 
 bool isOpenWater(Biome b) { return isWater(b) && b != Biome::SWAMP; }
 
-bool inLayer(int layer, Biome b) {
+bool inLayer(int layer, Biome b, uint8_t shade) {
   switch (layer) {
   case GROUND: return !isWater(b);
   case GRASS: return !isWater(b) && b != Biome::BEACH;
+  case MEADOW: return (b == Biome::GRASSLAND && shade >= 1) || b == Biome::FOREST;
   case FOREST: return b == Biome::FOREST;
   case WETLAND: return b == Biome::WETLAND;
   case GRAVEL: return b == Biome::MOUNTAIN || b == Biome::SNOW;
   case SNOW: return b == Biome::SNOW;
+  case DRIFT: return b == Biome::SNOW && shade >= 1;
   default: return false;
+  }
+}
+
+// A shade overlay's base layer: the overlay dithers toward it and cuts
+// cleanly, on the base's outline, against everything else.
+int overlayBase(int layer) {
+  switch (layer) {
+  case MEADOW: case FOREST: return GRASS;
+  case DRIFT: return SNOW;
+  default: return -1;
   }
 }
 
 // assets/ow_terrain.png: one row per layer, the corner shape in column `mask`,
 // full fills in columns kFillCol.. Sand has fills only (the coast is its
 // edge); GROUND draws the bank row's edges and its fill is sand or mud.
-constexpr int kTerrainRow[LAYER_COUNT] = {-1, 6, 0, 1, 2, 3, 4};
-constexpr int kSandRow = 5, kBankRow = 6;
+// assets/ow_shades.png: one row per overlay, 81 three-state corner tiles
+// (TL*27 + TR*9 + BL*3 + BR; 0 off the base, 1 base, 2 shaded), then fills.
+constexpr int kTerrainRow[LAYER_COUNT] = {-1, 5, 0, -1, -1, 1, 2, 3, -1};
+constexpr int kSandRow = 4, kBankRow = 5;
+constexpr int kShadeFillCol = 81;
 constexpr int kFillCol = 16, kFillCount = 4;
 // assets/ow_water.png rows.
 constexpr int kOpenWaterRow = 0, kSwampFillRow = 1, kSwampEdgeRow = 2;
@@ -152,7 +173,7 @@ constexpr int kReachSideTiles = widestFrame() / 2 + 1;
 OverworldRenderer::~OverworldRenderer() {
   if (!IsWindowReady())
     return;
-  for (Texture2D t : {m_water, m_coast, m_terrain, m_props})
+  for (Texture2D t : {m_water, m_coast, m_terrain, m_shades, m_props})
     if (t.id != 0)
       UnloadTexture(t);
 }
@@ -161,6 +182,7 @@ void OverworldRenderer::loadTextures() {
   m_water = assets::loadTexture("assets/ow_water.png", "OverworldRenderer");
   m_coast = assets::loadTexture("assets/ow_coast.png", "OverworldRenderer");
   m_terrain = assets::loadTexture("assets/ow_terrain.png", "OverworldRenderer");
+  m_shades = assets::loadTexture("assets/ow_shades.png", "OverworldRenderer");
   m_props = assets::loadTexture("assets/ow_props.png", "OverworldRenderer");
 }
 
@@ -221,7 +243,8 @@ void OverworldRenderer::renderTerrain(const Overworld &world,
   m_cells.resize((size_t)m_cellsW * (h + 2));
   for (int j = 0; j < h + 2; ++j)
     for (int i = 0; i < m_cellsW; ++i)
-      m_cells[j * m_cellsW + i] = world.biomeAt(x0 - 1 + i, y0 - 1 + j);
+      m_cells[j * m_cellsW + i] = {world.biomeAt(x0 - 1 + i, y0 - 1 + j),
+                                   world.shadeAt(x0 - 1 + i, y0 - 1 + j)};
 
   const int frame = (int)(time / kCoastFrameSeconds) % kCoastFrames;
   m_world = &world;
@@ -247,7 +270,27 @@ void OverworldRenderer::drawLayer(int layer, int x0, int y0, int w, int h,
     for (int i = 0; i < w + 1; ++i) {
       // Vertex (vx, vy) is the top-left corner of cell (vx, vy); cell
       // (vx - 1, vy - 1) sits at cache index (i, j).
-      const Biome c[4] = {cell(i, j), cell(i + 1, j), cell(i, j + 1), cell(i + 1, j + 1)};
+      const Cell q[4] = {cell(i, j), cell(i + 1, j), cell(i, j + 1), cell(i + 1, j + 1)};
+      const Biome c[4] = {q[0].biome, q[1].biome, q[2].biome, q[3].biome};
+      const int vx = x0 + i, vy = y0 + j;
+      const uint32_t hash =
+          noise::hash(m_world->wrapX(vx), m_world->wrapY(vy), seed ^ kFillSalt);
+      const int v = (int)(hash % kFillCount);
+
+      if (const int base = overlayBase(layer); base >= 0) {
+        int idx = 0;
+        bool any = false, all = true;
+        for (const Cell &k : q) {
+          int st = inLayer(layer, k.biome, k.shade) ? 2 : inLayer(base, k.biome, k.shade) ? 1 : 0;
+          idx = idx * 3 + st;
+          any = any || st == 2;
+          all = all && st == 2;
+        }
+        const int orow = layer == DRIFT ? 2 : layer - MEADOW;
+        if (any)
+          draw(m_shades, grid::srcTile(all ? kShadeFillCol + v : idx, orow), vx, vy);
+        continue;
+      }
       bool in[4];
       if (layer == SWAMP_WATER) {
         // Swamp water fades into open water over a dithered band on its own
@@ -265,15 +308,11 @@ void OverworldRenderer::drawLayer(int layer, int x0, int y0, int w, int h,
           in[k] = c[k] == Biome::SWAMP || (!open && !isWater(c[k]));
       } else {
         for (int k = 0; k < 4; ++k)
-          in[k] = inLayer(layer, c[k]);
+          in[k] = inLayer(layer, q[k].biome, q[k].shade);
       }
       int mask = cornerMask(in[0], in[1], in[2], in[3]);
       if (mask == 0)
         continue;
-      const int vx = x0 + i, vy = y0 + j;
-      const uint32_t hash =
-          noise::hash(m_world->wrapX(vx), m_world->wrapY(vy), seed ^ kFillSalt);
-      const int v = (int)(hash % kFillCount);
       if (layer == SWAMP_WATER) {
         draw(m_water,
              mask == 15 ? grid::srcTile((int)(hash % kWaterVariants), kSwampFillRow)

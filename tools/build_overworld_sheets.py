@@ -19,6 +19,8 @@ Outputs, all the renderer loads:
                   dash), row 1 swamp water fills, row 2 swamp water's 16
                   corner tiles (a dithered edge, so it fades into open water)
   ow_coast.png    High Tides' sand coast: lake + island blocks, 3 foam frames
+  ow_shades.png   shade overlays (meadow, forest floor, snow drifts): 81
+                  tiles per row, one per 3-state corner combination, + fills
   ow_terrain.png  one row per inland material: the 16 corner tiles + fills,
                   and a generated mud BANK row: LightBorne's shapes grown 4 px
                   into the water, the lip a lake or river shows past the grass
@@ -34,6 +36,13 @@ MASKS for every material: a transition tile is the material's own fill
 texture cut to LightBorne's shape, with LightBorne's outline pixels recoloured
 to two darker shades of that material. Every biome edge therefore has the
 same hand-drawn wobble, and no pack's mismatched edge art meets another's.
+
+SHADE OVERLAYS. A shade sits on a base material (forest floor on grass) and
+fades out over a dithered band. Its corners have THREE states - not on the
+base (water, beach), base only, shaded - because the overlay must dither
+toward plain base but cut cleanly, with the base's own outline, against
+anything else; otherwise every forest shore would show a band of grass.
+3^4 = 81 tiles per overlay, indexed TL*27 + TR*9 + BL*3 + BR.
 
 PROPS ON THE GRID. Pack sprites are not 16px-aligned. Each is cut to its
 opaque bounds, then placed in a frame of whole tiles with its trunk - the
@@ -92,7 +101,6 @@ RECOLOUR = {f"pc3_s{s}": {(0x84, 0x20, 0x20): (0xAD, 0x52, 0x26)} for s in (2, 3
 LB_CORNERS = {14: (0, 0), 12: (1, 0), 13: (2, 0), 8: (3, 0), 4: (4, 0),
               10: (0, 1), 5: (2, 1), 2: (3, 1), 1: (4, 1),
               11: (0, 2), 3: (1, 2), 7: (2, 2), 9: (3, 2), 6: (4, 2)}
-LB_FILLS = [(12, 1)]  # its other fills differ in shade and checkerboard when mixed
 # Every olive fill tile, holes and all: a corner-tile pixel in one of these
 # colours is grass body, anything else is outline.
 LB_BODY = [(c, r) for c in range(11, 20) for r in range(3)]
@@ -100,14 +108,26 @@ LB_BODY = [(c, r) for c in range(11, 20) for r in range(3)]
 # Row order is the renderer's TerrainMaterial order. Fills are (sheet, col, row).
 MATERIALS = [
     ("grass",   [("floors", 1, 10), ("floors", 2, 10), ("floors", 3, 10)]),
-    ("forest",  [("lb_tiles", c, r) for c, r in LB_FILLS]),
     ("wetland", [("swamp", 3, 1)]),
     ("gravel",  [("floors", 6, 10), ("floors", 7, 10), ("floors", 8, 10)]),
-    ("snow",    [("floors", 2, 14), ("floors", 3, 14), ("floors", 2, 15)]),
+    ("snow",    []),  # generated: snow_fills
     ("sand",    [("beach", 1, 1), ("beach", 2, 1), ("beach", 1, 2), ("beach", 2, 2)]),  # fills only: the coast is its edge
 ]
 FILL_COL = 16      # fills start here; columns 0-15 are the corner masks
 FILLS_PER_ROW = 4  # fewer fills repeat
+
+# Shade overlays (ow_shades.png), one row each, drawn over their base
+# material where Island::sample's shade says so. Each is the base's fills
+# recoloured with colours already in the palette (an approved choice over
+# adding in-between greens): grass gains forest-floor flecks at the meadow
+# edge, then turns forest floor; snow gets grey drifts. Row order is the
+# renderer's shade-overlay order.
+SHADES = [
+    ("meadow",      "grass", {"#3c6723": "#6a8657"}),
+    ("forest",      "grass", {"#3d7f41": "#6a8657"}),
+    ("drift",       "snow",  {"#dfe3ed": "#d9d9da", "#d9d9da": "#bdd5de", "#bdd5de": "#a6b7c6"}),
+]
+SHADE_BAND = 6.0  # px over which an overlay dithers out
 
 # ---- props -----------------------------------------------------------------
 # (ID, sheet, box in that sheet's px). The box only has to contain the sprite
@@ -301,42 +321,130 @@ def nearest_rgb(lab, pal):
     return rgb[np.argmin(np.linalg.norm(plab - lab, axis=1))]
 
 
+def hexrgb(h):
+    return tuple(int(h[i:i + 2], 16) for i in (1, 3, 5))
+
+
+def material_fills(src, name):
+    """A material's fill tiles. Snow is generated (see snow_fills)."""
+    if name == "snow":
+        return snow_fills()
+    return [tile(src[s], c, r) for s, c, r in dict(MATERIALS)[name]]
+
+
+def snow_fills():
+    """Snow: near-white with wind ripples - short strokes in the grey that
+    curl up at one end, a shadow under some. Strokes stay 1 px off the edge,
+    so any two fills tile."""
+    snow, ripple, shadow = hexrgb("#dfe3ed"), hexrgb("#d9d9da"), hexrgb("#bdd5de")
+    rng = np.random.default_rng(23)
+    out = []
+    for v in range(FILLS_PER_ROW):
+        f = np.zeros((T, T, 4), np.uint8)
+        f[:] = (*snow, 255)
+        for _ in range(rng.integers(2, 5)):
+            x, y = int(rng.integers(1, T - 6)), int(rng.integers(2, T - 2))
+            n = int(rng.integers(3, 6))
+            f[y, x:x + n, :3] = ripple
+            f[y - 1, x + n - 1, :3] = ripple
+            if rng.random() < 0.5:
+                f[y + 1, x + 1:x + n - 1, :3] = shadow
+        out.append(f)
+    return out
+
+
+def outline_shades(fill, pal):
+    """A material's outline: its fill's mean colour, darkened twice in OKLab
+    along the same hue, each snapped to the palette."""
+    body = fill.reshape(-1, 4)
+    mean = srgb_to_oklab(body[body[:, 3] > 0][:, :3]).mean(0)
+    return [nearest_rgb(mean * [1, k, k] - [d, 0, 0], pal) for d, k in ((0.24, 1.1), (0.12, 1.05))]
+
+
+def lb_body_colours(lb):
+    return {tuple(px[:3]) for c, r in LB_BODY for px in tile(lb, c, r).reshape(-1, 4) if px[3]}
+
+
+def outline_tile(m, fill, shades, lb_body):
+    """LightBorne corner tile `m` in a material: body pixels from the fill
+    (so the edge and the fill beside it are one texture), outline pixels
+    dark or mid by their own lightness."""
+    out = np.zeros_like(m)
+    for y in range(T):
+        for x in range(T):
+            if m[y, x, 3] == 0:
+                continue
+            if tuple(m[y, x, :3]) in lb_body:
+                out[y, x] = fill[y, x]
+            else:
+                L = srgb_to_oklab(m[y, x, :3][None].astype(np.uint8))[0, 0]
+                out[y, x, :3] = shades[0] if L < 0.45 else shades[1]
+                out[y, x, 3] = 255
+    return out
+
+
 def terrain_sheet(src, pal):
     lb = src["lb_tiles"]
-    lb_body = {tuple(px[:3]) for c, r in LB_BODY for px in tile(lb, c, r).reshape(-1, 4) if px[3]}
+    lb_body = lb_body_colours(lb)
     rows = []
-    for name, fills in MATERIALS:
+    for name, _ in MATERIALS:
         row = np.zeros((T, (FILL_COL + FILLS_PER_ROW) * T, 4), np.uint8)
-        fill_tiles = [tile(src[s], c, r) for s, c, r in fills]
+        fill_tiles = material_fills(src, name)
         for i in range(FILLS_PER_ROW):
             row[:, (FILL_COL + i) * T:(FILL_COL + i + 1) * T] = fill_tiles[i % len(fill_tiles)]
         if name != "sand":
             row[:, 15 * T:16 * T] = fill_tiles[0]
-            # The material's outline: its fill's mean colour, darkened twice in
-            # OKLab along the same hue, each snapped to the palette.
-            body = fill_tiles[0].reshape(-1, 4)
-            mean = srgb_to_oklab(body[body[:, 3] > 0][:, :3]).mean(0)
-            shades = [nearest_rgb(mean * [1, k, k] - [d, 0, 0], pal) for d, k in ((0.24, 1.1), (0.12, 1.05))]
+            shades = outline_shades(fill_tiles[0], pal)
             for mask, (c, r) in LB_CORNERS.items():
-                m = tile(lb, c, r)
-                out = np.zeros_like(m)
-                for y in range(T):
-                    for x in range(T):
-                        if m[y, x, 3] == 0:
-                            continue
-                        if tuple(m[y, x, :3]) in lb_body:
-                            # Body from the fill tile itself, so the edge and
-                            # the fill beside it are the same texture.
-                            out[y, x] = fill_tiles[0][y, x]
-                        elif name == "forest":
-                            out[y, x] = m[y, x]  # LightBorne's own outline
-                        else:  # outline pixel: dark or mid by its own lightness
-                            L = srgb_to_oklab(m[y, x, :3][None].astype(np.uint8))[0, 0]
-                            out[y, x, :3] = shades[0] if L < 0.45 else shades[1]
-                            out[y, x, 3] = 255
-                row[:, mask * T:(mask + 1) * T] = out
+                row[:, mask * T:(mask + 1) * T] = outline_tile(tile(lb, c, r), fill_tiles[0], shades, lb_body)
         rows.append(row)
     rows.append(bank_row(lb))
+    return np.concatenate(rows, axis=0)
+
+
+def recolour(a, mapping):
+    out = a.copy()
+    for old, new in mapping.items():
+        out[match(a, hexrgb(old)), :3] = hexrgb(new)
+    return out
+
+
+def shades_sheet(src, pal):
+    lb = src["lb_tiles"]
+    lb_body = lb_body_colours(lb)
+    yy, xx = np.mgrid[0:T, 0:T]
+    bits = (8, 4, 2, 1)
+    rows = []
+    for _, base, mapping in SHADES:
+        fills = [recolour(f, mapping) for f in material_fills(src, base)]
+        outline = outline_shades(fills[0], pal)
+        row = np.zeros((T, (81 + FILLS_PER_ROW) * T, 4), np.uint8)
+        for i in range(FILLS_PER_ROW):
+            row[:, (81 + i) * T:(82 + i) * T] = fills[i % len(fills)]
+        for idx in range(81):
+            st = [idx // 27 % 3, idx // 9 % 3, idx // 3 % 3, idx % 3]  # TL TR BL BR
+            on_base = sum(b for b, q in zip(bits, st) if q >= 1)
+            shaded = sum(b for b, q in zip(bits, st) if q == 2)
+            plain = sum(b for b, q in zip(bits, st) if q == 1)
+            if shaded == 0:
+                continue
+            if on_base == 15:
+                t = fills[0].copy()
+            else:
+                c, r = LB_CORNERS[on_base]
+                t = outline_tile(tile(lb, c, r), fills[0], outline, lb_body)
+            # Dither out toward plain base only, inward from LightBorne's
+            # wobbly shape (not the straight cell line, which reads as a
+            # staircase); against anything else the base's outline is the edge.
+            if plain:
+                c, r = LB_CORNERS[15 - plain]
+                d = dist_to(tile(lb, c, r)[..., 3] == 0)
+            else:
+                d = np.full((T, T), 99.0)
+            keep = BAYER4[yy % 4, xx % 4] < np.clip(d / SHADE_BAND, 0, 1) * 16
+            t[~keep] = 0
+            row[:, idx * T:(idx + 1) * T] = t
+        rows.append(row)
     return np.concatenate(rows, axis=0)
 
 
@@ -454,6 +562,7 @@ def main():
     save(water_sheet(), os.path.join(assets, "ow_water.png"))
     save(src["coast"], os.path.join(assets, "ow_coast.png"))
     save(terrain_sheet(src, pal), os.path.join(assets, "ow_terrain.png"))
+    save(shades_sheet(src, pal), os.path.join(assets, "ow_shades.png"))
     atlas, frames = props_atlas(src)
     save(atlas, os.path.join(assets, "ow_props.png"))
     write_header(frames, os.path.join(ROOT, "src", "render", "overworld_sprites.hpp"))

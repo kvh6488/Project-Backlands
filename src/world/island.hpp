@@ -22,6 +22,9 @@
 //   land    Biome rules (biome.hpp), with moisture raised near water and
 //           raised further, over a wider halo, near swamp water; beach only
 //           within a wobbling reach of the ocean
+//   shade   how far moisture is past the forest line (grassland and forest),
+//           or a drift field (snow), cut into steps - so the ground can
+//           fade across a border the biome itself switches at
 //
 // Every lookup touches at most nine coarse cells plus their river reaches:
 // O(1) per tile.
@@ -31,6 +34,10 @@ struct TileSample {
   float height = 0.0f;
   float temperature = 0.0f;
   float moisture = 0.0f;
+  // A step inside the biome, for the renderer's fades and the prop density:
+  // grassland 0 open / 1 meadow edge; forest 2 edge / 3 deep; snow 0 / 1
+  // drift. 0 elsewhere.
+  uint8_t shade = 0;
 };
 
 class Island {
@@ -59,6 +66,9 @@ public:
   static constexpr float kBeachReach = 1.5f; // +-0.5 by noise: ~4-12 tiles of sand
   static constexpr float kSwampWet = 0.55f;    // moisture added at swamp water
   static constexpr float kSwampSpread = 4.0f;  // e-folding distance (~32 tiles)
+  // Moisture past the forest line where the shade steps (jittered per tile).
+  static constexpr float kMeadowMargin = -0.04f;    // grassland 0 -> 1
+  static constexpr float kDeepForestMargin = 0.05f; // forest 2 -> 3
 
 private:
   void chooseSpawn();
