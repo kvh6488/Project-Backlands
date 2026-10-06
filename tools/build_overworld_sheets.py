@@ -18,6 +18,9 @@ Outputs, all the renderer loads:
   ow_water.png    generated water: row 0 open water (8 fills, three with a
                   dash), row 1 swamp water fills, row 2 swamp water's 16
                   corner tiles (a dithered edge, so it fades into open water)
+  ow_river.png    flowing water: one 64px square that tiles with itself, which
+                  the renderer scrolls downstream (dashes a little denser than
+                  still water's, so the motion reads)
   ow_coast.png    High Tides' sand coast: lake + island blocks, 3 foam frames
   ow_shades.png   shade overlays (grass -> forest floor, snow drifts): 81
                   tiles per row, one per 3-state corner combination, + fills
@@ -397,6 +400,31 @@ def water_sheet():
     return a
 
 
+def river_sheet():
+    """64x64 of open water with light dashes, seamless (dashes wrap round the
+    edges). The renderer samples it by world position plus a scroll, so
+    neighbouring river tiles show one continuous surface."""
+    base, light = (0x4E, 0x91, 0xAF, 255), (0x6E, 0xA7, 0xC6, 255)
+    n = 4 * T
+    a = np.zeros((n, n, 4), np.uint8)
+    a[:] = base
+    rng = np.random.default_rng(31)
+    taken = np.zeros((n, n), bool)
+    placed = 0
+    while placed < 14:
+        x, y, length = int(rng.integers(0, n)), int(rng.integers(0, n)), int(rng.integers(2, 5))
+        xs = [(x + i) % n for i in range(length)]
+        # Keep dashes apart (a 2 px margin all round), so none merge.
+        near = [((y + dy) % n, (xx + dx) % n) for xx in xs for dy in (-2, -1, 0, 1, 2) for dx in (-2, 0, 2)]
+        if any(taken[p] for p in near):
+            continue
+        for xx in xs:
+            a[y, xx] = light
+            taken[y, xx] = True
+        placed += 1
+    return a
+
+
 def bank_row(lb):
     """Mud bank: each LightBorne corner shape grown 4 px into the water. The
     grass drawn over it hides the original shape, so what shows is the lip:
@@ -693,6 +721,7 @@ def main():
 
     assets = os.path.join(ROOT, "assets")
     save(water_sheet(), os.path.join(assets, "ow_water.png"))
+    save(river_sheet(), os.path.join(assets, "ow_river.png"))
     save(src["coast"], os.path.join(assets, "ow_coast.png"))
     save(terrain_sheet(src, pal), os.path.join(assets, "ow_terrain.png"))
     save(shades_sheet(src, pal), os.path.join(assets, "ow_shades.png"))

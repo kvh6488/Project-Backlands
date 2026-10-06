@@ -80,6 +80,7 @@ public:
   Biome biomeAt(int x, int y) const;
   float heightAt(int x, int y) const;
   uint8_t shadeAt(int x, int y) const; // TileSample::shade
+  uint8_t flowAt(int x, int y) const;  // TileSample::flow
   PropType propAt(int x, int y) const;
   // The full record of the prop on a tile, or null. Valid until its chunk is
   // evicted by retainAround - read it, do not keep it.
@@ -122,6 +123,7 @@ private:
     std::array<Biome, kChunk * kChunk> biome;
     std::array<float, kChunk * kChunk> height;
     std::array<uint8_t, kChunk * kChunk> shade;
+    std::array<uint8_t, kChunk * kChunk> flow;
     std::array<int16_t, kChunk * kChunk> propIndex; // into props, or -1
     std::vector<Prop> props;
   };

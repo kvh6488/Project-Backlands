@@ -1,6 +1,7 @@
 #include "world/island.hpp"
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 
 Island::Island(uint32_t seed, const IslandConfig &cfg)
     : m_seed(seed), m_cfg(cfg), m_field(seed, cfg),
@@ -73,19 +74,36 @@ TileSample Island::sample(int x, int y) const {
   }
 
   // Coordinates here are unwrapped tile space, which is what the reaches
-  // are stored in; rivers never come near the seam.
+  // are stored in; rivers never come near the seam. Where reaches overlap (a
+  // confluence, a bend) the nearest one decides, so the flow direction
+  // changes along the centre line between them rather than mid-bank.
   float wobble = 1.0f + 0.25f * noise::gradient(px / 9.0f, py / 9.0f, m_seed);
+  const IslandMap::Segment *reach = nullptr;
+  float nearest = 0.0f;
   for (int dy = -1; dy <= 1; ++dy) {
     for (int dx = -1; dx <= 1; ++dx) {
       int c = m_map.index(cx + dx, cy + dy);
       for (int i = m_map.segStart[c]; i < m_map.segStart[c + 1]; ++i) {
         const IslandMap::Segment &s = m_map.segments[m_map.segIds[i]];
-        if (distToSegment(px, py, s) < s.halfWidth * wobble) {
-          out.biome = m_map.swampRiver[s.cell] ? Biome::SWAMP : Biome::RIVER;
-          return out;
+        float d = distToSegment(px, py, s);
+        if (d < s.halfWidth * wobble && (!reach || d < nearest)) {
+          reach = &s;
+          nearest = d;
         }
       }
     }
+  }
+  if (reach) {
+    if (m_map.swampRiver[reach->cell]) {
+      out.biome = Biome::SWAMP; // swamp water lies still
+      return out;
+    }
+    out.biome = Biome::RIVER;
+    // The reach's direction rounded to one of 8 steps; atan2's y is down.
+    float a = std::atan2(reach->by - reach->ay, reach->bx - reach->ax);
+    int octant = (int)std::lround(a / (std::numbers::pi_v<float> / 4.0f));
+    out.flow = (uint8_t)(((octant % 8) + 8) % 8 + 1);
+    return out;
   }
 
   out.temperature = m_field.temperature(px, py, out.height);

@@ -77,6 +77,7 @@ Overworld::Chunk Overworld::build(int cx, int cy) const {
       c.biome[y * kChunk + x] = s.biome;
       c.height[y * kChunk + x] = s.height;
       c.shade[y * kChunk + x] = s.shade;
+      c.flow[y * kChunk + x] = s.flow;
     }
   }
   c.propIndex.fill(-1);
@@ -168,6 +169,13 @@ uint8_t Overworld::shadeAt(int x, int y) const {
   y = wrapY(y);
   const Chunk &c = chunk(x / kChunk, y / kChunk);
   return c.shade[(y % kChunk) * kChunk + (x % kChunk)];
+}
+
+uint8_t Overworld::flowAt(int x, int y) const {
+  x = wrapX(x);
+  y = wrapY(y);
+  const Chunk &c = chunk(x / kChunk, y / kChunk);
+  return c.flow[(y % kChunk) * kChunk + (x % kChunk)];
 }
 
 const Prop *Overworld::findProp(int x, int y) const {

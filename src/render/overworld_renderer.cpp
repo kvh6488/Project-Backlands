@@ -78,6 +78,8 @@ constexpr int kCoastFrames = 3;
 constexpr float kCoastFrameSeconds = 0.4f;
 
 constexpr int kWaterVariants = 8;
+// River water's speed, in art px per second along its flow step.
+constexpr float kFlowSpeed = 6.0f;
 
 // Per-purpose salts, so the water, fill and prop hashes are unrelated.
 constexpr uint32_t kWaterSalt = 0x5bd1e995u, kFillSalt = 0x27d4eb2fu;
@@ -232,13 +234,16 @@ constexpr int kReachSideTiles = widestFrame() / 2 + 1;
 OverworldRenderer::~OverworldRenderer() {
   if (!IsWindowReady())
     return;
-  for (Texture2D t : {m_water, m_coast, m_terrain, m_shades, m_props, m_propsWet})
+  for (Texture2D t : {m_water, m_river, m_coast, m_terrain, m_shades, m_props, m_propsWet})
     if (t.id != 0)
       UnloadTexture(t);
 }
 
 void OverworldRenderer::loadTextures() {
   m_water = assets::loadTexture("assets/ow_water.png", "OverworldRenderer");
+  m_river = assets::loadTexture("assets/ow_river.png", "OverworldRenderer");
+  // Sampled past its edges on purpose: the scroll wraps round.
+  SetTextureWrap(m_river, TEXTURE_WRAP_REPEAT);
   m_coast = assets::loadTexture("assets/ow_coast.png", "OverworldRenderer");
   m_terrain = assets::loadTexture("assets/ow_terrain.png", "OverworldRenderer");
   m_shades = assets::loadTexture("assets/ow_shades.png", "OverworldRenderer");
@@ -284,8 +289,36 @@ void OverworldRenderer::renderTerrain(const Overworld &world,
   const int w = view.endX - x0 + 1, h = view.endY - y0 + 1;
   const uint32_t seed = world.island().seed();
 
+  // Dual-grid vertices x0..x0+w each read the cells on both sides, so the
+  // cache starts one cell up-left of the view and is two cells wider.
+  m_cellsW = w + 2;
+  m_cells.resize((size_t)m_cellsW * (h + 2));
+  for (int j = 0; j < h + 2; ++j) {
+    for (int i = 0; i < m_cellsW; ++i) {
+      const int x = x0 - 1 + i, y = y0 - 1 + j;
+      m_cells[j * m_cellsW + i] = {world.biomeAt(x, y), world.shadeAt(x, y),
+                                   world.flowAt(x, y)};
+    }
+  }
+
+  // Whole art px travelled, so the water steps crisply; a diagonal step
+  // covers sqrt(2) px, so it advances that much less often.
+  const int run = (int)(time * kFlowSpeed), runDiagonal = (int)(time * kFlowSpeed * 0.7071f);
   for (int y = y0; y < y0 + h; ++y) {
     for (int x = x0; x < x0 + w; ++x) {
+      const Cell &c = m_cells[(y - y0 + 1) * m_cellsW + (x - x0 + 1)];
+      if (c.flow != 0) {
+        int dx, dy;
+        flowStep(c.flow, dx, dy);
+        const int s = dx != 0 && dy != 0 ? runDiagonal : run;
+        // Sampling upstream of the tile moves the picture downstream.
+        Rectangle src = {(float)(x * grid::SOURCE_TILE - dx * s),
+                         (float)(y * grid::SOURCE_TILE - dy * s), (float)grid::SOURCE_TILE,
+                         (float)grid::SOURCE_TILE};
+        DrawTexturePro(m_river, src, grid::destFor(src, x * grid::CELL, y * grid::CELL),
+                       {0, 0}, 0.0f, WHITE);
+        continue;
+      }
       int v = (int)(noise::hash(world.wrapX(x), world.wrapY(y),
                                 seed ^ kWaterSalt) % kWaterVariants);
       Rectangle src = grid::srcTile(v, kOpenWaterRow);
@@ -293,15 +326,6 @@ void OverworldRenderer::renderTerrain(const Overworld &world,
                      {0, 0}, 0.0f, WHITE);
     }
   }
-
-  // Dual-grid vertices x0..x0+w each read the cells on both sides, so the
-  // cache starts one cell up-left of the view and is two cells wider.
-  m_cellsW = w + 2;
-  m_cells.resize((size_t)m_cellsW * (h + 2));
-  for (int j = 0; j < h + 2; ++j)
-    for (int i = 0; i < m_cellsW; ++i)
-      m_cells[j * m_cellsW + i] = {world.biomeAt(x0 - 1 + i, y0 - 1 + j),
-                                   world.shadeAt(x0 - 1 + i, y0 - 1 + j)};
 
   const int frame = (int)(time / kCoastFrameSeconds) % kCoastFrames;
   m_world = &world;

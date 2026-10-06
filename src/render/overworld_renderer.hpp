@@ -29,6 +29,10 @@
 // A layer's tiles are transparent outside its shape, so the layer beneath
 // shows through and a three-biome corner needs no special tile.
 //
+// RIVERS FLOW: river water is one repeating texture sampled at the tile's
+// world position, shifted downstream by time along the tile's flow step. The
+// banks drawn over it stay put, so the water slides past them.
+//
 // The coast is High Tides' hand-drawn sand set (foam, 3 animation frames),
 // which has 14 of the 16 shapes; the two diagonals are drawn as two single
 // corners. Inland layers use generated sets with all 16 (see
@@ -96,7 +100,8 @@ private:
   void drawLayer(int layer, int x0, int y0, int w, int h, int frame) const;
   void drawDecals(int x0, int y0, int w, int h) const;
 
-  Texture2D m_water{}, m_coast{}, m_terrain{}, m_shades{}, m_props{}, m_propsWet{};
+  Texture2D m_water{}, m_river{}, m_coast{}, m_terrain{}, m_shades{}, m_props{},
+      m_propsWet{};
   const Overworld *m_world = nullptr;
   Vector2 m_focus{};
   // The cells around the view, (w+2) x (h+2), rebuilt per frame so each
@@ -104,6 +109,7 @@ private:
   struct Cell {
     Biome biome;
     uint8_t shade;
+    uint8_t flow;
   };
   std::vector<Cell> m_cells;
   int m_cellsW = 0;

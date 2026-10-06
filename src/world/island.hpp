@@ -25,6 +25,8 @@
 //   shade   how far moisture is past the forest line (grassland and forest),
 //           or a drift field (snow), cut into steps - so the ground can
 //           fade across a border the biome itself switches at
+//   flow    river water's downstream direction: its nearest reach's, which
+//           runs from the upstream cell's node to its receiver's
 //
 // Every lookup touches at most nine coarse cells plus their river reaches:
 // O(1) per tile.
@@ -38,7 +40,18 @@ struct TileSample {
   // grassland 0 open / 1 meadow edge; forest 2 edge / 3 deep; snow 0 / 1
   // drift. 0 elsewhere.
   uint8_t shade = 0;
+  // River water's downstream direction (flowStep), 0 for still water and land.
+  uint8_t flow = 0;
 };
+
+// A flow byte as a unit step: 1 = east, then clockwise in screen space
+// (y down) to 8 = north-east. 0 is still: (0, 0).
+inline void flowStep(uint8_t flow, int &dx, int &dy) {
+  static constexpr int kDx[9] = {0, 1, 1, 0, -1, -1, -1, 0, 1};
+  static constexpr int kDy[9] = {0, 0, 1, 1, 1, 0, -1, -1, -1};
+  dx = kDx[flow < 9 ? flow : 0];
+  dy = kDy[flow < 9 ? flow : 0];
+}
 
 class Island {
 public:

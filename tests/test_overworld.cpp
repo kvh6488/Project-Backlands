@@ -162,6 +162,32 @@ TEST(IslandTest, SwampWaterIsASwampLakeAndTheRiversBesideIt) {
   }
 }
 
+TEST(IslandTest, OnlyRiversFlowAndTheyFlowDownstream) {
+  const Island &isl = sharedWorld().island();
+  const IslandMap &m = isl.map();
+  int checked = 0;
+  for (const IslandMap::Segment &s : m.segments) {
+    // A reach's midpoint is river (or swamp) water; if it is river, its flow
+    // step points the way the reach runs, from upstream node to receiver.
+    int x = (int)std::floor((s.ax + s.bx) / 2.0f), y = (int)std::floor((s.ay + s.by) / 2.0f);
+    TileSample t = isl.sample(x, y);
+    if (t.biome != Biome::RIVER)
+      continue;
+    ASSERT_NE(t.flow, 0);
+    int dx, dy;
+    flowStep(t.flow, dx, dy);
+    EXPECT_GT(dx * (s.bx - s.ax) + dy * (s.by - s.ay), 0.0f) << x << " " << y;
+    ++checked;
+  }
+  EXPECT_GT(checked, 50);
+  // Everything else lies still.
+  for (int y = 0; y < isl.config().size; y += 37)
+    for (int x = 0; x < isl.config().size; x += 37) {
+      TileSample t = isl.sample(x, y);
+      EXPECT_EQ(t.flow != 0, t.biome == Biome::RIVER) << x << " " << y;
+    }
+}
+
 TEST(IslandTest, BeachesHugTheOcean) {
   // Beach is capped by distance to the open sea, so no tile of it lies more
   // than the widest reach (in coarse cells) from an ocean cell.
