@@ -15,9 +15,13 @@ OKLab), after two recorded edits: High Tides' flat sea is cut out of the coast
 (our water shows through), and Pixel Crawler's red pine is recoloured rust.
 
 Outputs, all the renderer loads:
-  ow_water.png    8 generated 16px water fills (most plain, three with a dash)
+  ow_water.png    generated water: row 0 open water (8 fills, three with a
+                  dash), row 1 swamp water fills, row 2 swamp water's 16
+                  corner tiles (a dithered edge, so it fades into open water)
   ow_coast.png    High Tides' sand coast: lake + island blocks, 3 foam frames
-  ow_terrain.png  one row per inland material: the 16 corner tiles + fills
+  ow_terrain.png  one row per inland material: the 16 corner tiles + fills,
+                  and a generated mud BANK row: LightBorne's shapes grown 4 px
+                  into the water, the lip a lake or river shows past the grass
   ow_props.png    every tree, bush, rock and reed, repacked on the 16px grid
   src/render/overworld_sprites.hpp   where each prop sits in ow_props.png
 
@@ -196,17 +200,100 @@ def tile(a, col, row):
     return a[row * T:(row + 1) * T, col * T:(col + 1) * T]
 
 
+BAYER4 = np.array([[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]])
+
+
+def quadrant_in(mask):
+    """16x16 bools: is each pixel in a cell the dual tile's mask includes."""
+    yy, xx = np.mgrid[0:T, 0:T]
+    bit = np.where(yy < T // 2, np.where(xx < T // 2, 8, 4), np.where(xx < T // 2, 2, 1))
+    return (bit & mask) != 0
+
+
+def dist_to(region):
+    """Per pixel, the Euclidean distance (px) to the nearest pixel of
+    `region` inside the tile; large where region is empty."""
+    ys, xs = np.nonzero(region)
+    if len(ys) == 0:
+        return np.full((T, T), 99.0)
+    yy, xx = np.mgrid[0:T, 0:T]
+    d = np.sqrt((yy[..., None] - ys) ** 2 + (xx[..., None] - xs) ** 2)
+    return d.min(-1)
+
+
 def water_sheet():
-    """8 seamless fills, five plain and three with one short light dash -
-    Pixel Crawler's open-water ripples as they look on the palette. Dashes stay
-    off the tile edge, so any two variants tile seamlessly."""
+    """Row 0: 8 seamless open-water fills, five plain and three with one short
+    light dash - Pixel Crawler's ripples as they look on the palette. Dashes
+    stay off the tile edge, so any two variants tile seamlessly.
+    Row 1: swamp water - murky grey-green, flecked with duckweed.
+    Row 2: swamp water's corner tiles. Cell boundaries in a dual tile only run
+    along its middle lines, so in-tile distances are exact; the edge thins out
+    over 4 px by an ordered (Bayer) dither, which keeps the pattern aligned
+    across tiles because every tile origin is a multiple of 4."""
     base, light = (0x4E, 0x91, 0xAF, 255), (0x6E, 0xA7, 0xC6, 255)
     dashes = {5: (3, 4, 3), 6: (9, 10, 2), 7: (5, 12, 4)}  # variant: (x, y, length)
-    a = np.zeros((T, 8 * T, 4), np.uint8)
-    a[:] = base
+    a = np.zeros((3 * T, 16 * T, 4), np.uint8)
+    a[0:T, 0:8 * T] = base
     for v, (x, y, n) in dashes.items():
         a[y, v * T + x:v * T + x + n] = light
+
+    murk, weed, weed_lit, ripple = (0x41, 0x56, 0x4B), (0x3D, 0x7F, 0x41), (0x6A, 0x86, 0x57), (0x57, 0x64, 0x77)
+    rng = np.random.default_rng(7)
+    fills = []
+    for v in range(8):
+        f = np.zeros((T, T, 4), np.uint8)
+        f[:] = (*murk, 255)
+        # A few duckweed clumps (a dark fleck with a lit pixel) and, on some
+        # variants, one dull ripple. Kept off the edge so fills tile.
+        for _ in range(rng.integers(0, 3)):
+            x, y = rng.integers(2, T - 3, 2)
+            f[y, x:x + 2, :3] = weed
+            f[y - 1, x, :3] = weed_lit
+        if v % 3 == 2:
+            x, y = rng.integers(2, T - 6), rng.integers(3, T - 3)
+            f[y, x:x + 3, :3] = ripple
+        fills.append(f)
+        a[T:2 * T, v * T:(v + 1) * T] = f
+    band = 4.0
+    for mask in range(1, 15):
+        inside = quadrant_in(mask)
+        d = dist_to(~inside)
+        yy, xx = np.mgrid[0:T, 0:T]
+        keep = inside & (BAYER4[yy % 4, xx % 4] < np.clip(d / band, 0, 1) * 16)
+        t = fills[mask % 8].copy()
+        t[~keep] = 0
+        a[2 * T:3 * T, mask * T:(mask + 1) * T] = t
     return a
+
+
+def bank_row(lb):
+    """Mud bank: each LightBorne corner shape grown 4 px into the water. The
+    grass drawn over it hides the original shape, so what shows is the lip:
+    three px of mud and one of dark wet mud at the waterline. Fills are mud
+    too (seen only where nothing covers them)."""
+    mud, mud_dark, wet = (0x7D, 0x4C, 0x2E), (0x66, 0x3B, 0x27), (0x4A, 0x2A, 0x19)
+    rng = np.random.default_rng(11)
+    row = np.zeros((T, (FILL_COL + FILLS_PER_ROW) * T, 4), np.uint8)
+    fill = np.zeros((T, T, 4), np.uint8)
+    fill[:] = (*mud, 255)
+    for _ in range(10):
+        x, y = rng.integers(0, T, 2)
+        fill[y, x, :3] = mud_dark
+    for i in range(FILLS_PER_ROW):
+        row[:, (FILL_COL + i) * T:(FILL_COL + i + 1) * T] = np.roll(fill, (5 * i, 7 * i), (0, 1))
+    row[:, 15 * T:16 * T] = fill
+    for mask, (c, r) in LB_CORNERS.items():
+        shape = tile(lb, c, r)[..., 3] > 0
+        # Grow only within the cells the mask says are land or toward water:
+        # distance from the shape, measured inside the tile.
+        d = dist_to(shape)
+        out = np.zeros((T, T, 4), np.uint8)
+        lip = d <= 4.0
+        out[lip] = fill[lip]
+        out[(d > 3.0) & lip] = (*wet, 255)
+        out[(d > 2.0) & (d <= 3.0) & (rng.random((T, T)) < 0.4)] = (*mud_dark, 255)
+        row[:, mask * T:(mask + 1) * T] = out
+    return row
 
 
 def nearest_rgb(lab, pal):
@@ -249,6 +336,7 @@ def terrain_sheet(src, pal):
                             out[y, x, 3] = 255
                 row[:, mask * T:(mask + 1) * T] = out
         rows.append(row)
+    rows.append(bank_row(lb))
     return np.concatenate(rows, axis=0)
 
 

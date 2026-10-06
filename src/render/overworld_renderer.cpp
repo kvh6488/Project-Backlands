@@ -15,11 +15,16 @@ namespace {
 // its transparent edges, so a layer also covers the cells of any layer that
 // should sit on IT - gravel runs under snow, or a snowfield on a mountain
 // would show a grass rim.
-enum Layer { SAND, GRASS, FOREST, WETLAND, GRAVEL, SNOW, LAYER_COUNT };
+//
+// SWAMP_WATER sits on the open water. GROUND is all land: its edge is the
+// sand-and-foam coast where the ocean is, a mud bank on lakes and rivers.
+enum Layer { SWAMP_WATER, GROUND, GRASS, FOREST, WETLAND, GRAVEL, SNOW, LAYER_COUNT };
+
+bool isOpenWater(Biome b) { return isWater(b) && b != Biome::SWAMP; }
 
 bool inLayer(int layer, Biome b) {
   switch (layer) {
-  case SAND: return !isWater(b);
+  case GROUND: return !isWater(b);
   case GRASS: return !isWater(b) && b != Biome::BEACH;
   case FOREST: return b == Biome::FOREST;
   case WETLAND: return b == Biome::WETLAND;
@@ -30,9 +35,13 @@ bool inLayer(int layer, Biome b) {
 }
 
 // assets/ow_terrain.png: one row per layer, the corner shape in column `mask`,
-// full fills in columns kFillCol.. (sand has fills only - the coast is its edge).
-constexpr int kTerrainRow[LAYER_COUNT] = {5, 0, 1, 2, 3, 4};
+// full fills in columns kFillCol.. Sand has fills only (the coast is its
+// edge); GROUND draws the bank row's edges and its fill is sand or mud.
+constexpr int kTerrainRow[LAYER_COUNT] = {-1, 6, 0, 1, 2, 3, 4};
+constexpr int kSandRow = 5, kBankRow = 6;
 constexpr int kFillCol = 16, kFillCount = 4;
+// assets/ow_water.png rows.
+constexpr int kOpenWaterRow = 0, kSwampFillRow = 1, kSwampEdgeRow = 2;
 
 // assets/ow_coast.png: High Tides' sand coast. The island block (sand blob in
 // water) holds the shapes with 1-2 sand corners, the lake block (water hole in
@@ -200,7 +209,7 @@ void OverworldRenderer::renderTerrain(const Overworld &world,
     for (int x = x0; x < x0 + w; ++x) {
       int v = (int)(noise::hash(world.wrapX(x), world.wrapY(y),
                                 seed ^ kWaterSalt) % kWaterVariants);
-      Rectangle src = grid::srcTile(v, 0);
+      Rectangle src = grid::srcTile(v, kOpenWaterRow);
       DrawTexturePro(m_water, src, grid::destFor(src, x * grid::CELL, y * grid::CELL),
                      {0, 0}, 0.0f, WHITE);
     }
@@ -223,9 +232,7 @@ void OverworldRenderer::renderTerrain(const Overworld &world,
 void OverworldRenderer::drawLayer(int layer, int x0, int y0, int w, int h,
                                   int frame) const {
   const uint32_t seed = m_world->island().seed();
-  auto in = [&](int i, int j) {
-    return inLayer(layer, m_cells[j * m_cellsW + i]);
-  };
+  auto cell = [&](int i, int j) { return m_cells[j * m_cellsW + i]; };
   auto draw = [](Texture2D tex, Rectangle src, int vx, int vy) {
     // A dual tile is centred on the corner shared by four cells.
     DrawTexturePro(tex, src,
@@ -240,15 +247,57 @@ void OverworldRenderer::drawLayer(int layer, int x0, int y0, int w, int h,
     for (int i = 0; i < w + 1; ++i) {
       // Vertex (vx, vy) is the top-left corner of cell (vx, vy); cell
       // (vx - 1, vy - 1) sits at cache index (i, j).
-      int mask = cornerMask(in(i, j), in(i + 1, j), in(i, j + 1), in(i + 1, j + 1));
+      const Biome c[4] = {cell(i, j), cell(i + 1, j), cell(i, j + 1), cell(i + 1, j + 1)};
+      bool in[4];
+      if (layer == SWAMP_WATER) {
+        // Swamp water fades into open water over a dithered band on its own
+        // side. Where no open water meets this corner, land counts as swamp
+        // too - it is drawn over anyway, and the band would otherwise show
+        // blue specks along every swamp shore.
+        bool open = false, swamp = false;
+        for (Biome b : c) {
+          open = open || isOpenWater(b);
+          swamp = swamp || b == Biome::SWAMP;
+        }
+        if (!swamp)
+          continue; // all-land corners would draw swamp nobody sees
+        for (int k = 0; k < 4; ++k)
+          in[k] = c[k] == Biome::SWAMP || (!open && !isWater(c[k]));
+      } else {
+        for (int k = 0; k < 4; ++k)
+          in[k] = inLayer(layer, c[k]);
+      }
+      int mask = cornerMask(in[0], in[1], in[2], in[3]);
       if (mask == 0)
         continue;
       const int vx = x0 + i, vy = y0 + j;
+      const uint32_t hash =
+          noise::hash(m_world->wrapX(vx), m_world->wrapY(vy), seed ^ kFillSalt);
+      const int v = (int)(hash % kFillCount);
+      if (layer == SWAMP_WATER) {
+        draw(m_water,
+             mask == 15 ? grid::srcTile((int)(hash % kWaterVariants), kSwampFillRow)
+                        : grid::srcTile(mask, kSwampEdgeRow),
+             vx, vy);
+        continue;
+      }
       if (mask == 15) {
-        int v = (int)(noise::hash(m_world->wrapX(vx), m_world->wrapY(vy),
-                                  seed ^ kFillSalt) % kFillCount);
-        draw(m_terrain, grid::srcTile(kFillCol + v, row), vx, vy);
-      } else if (layer != SAND) {
+        int fillRow = row;
+        if (layer == GROUND) {
+          bool beach = false;
+          for (Biome b : c)
+            beach = beach || b == Biome::BEACH;
+          fillRow = beach ? kSandRow : kBankRow;
+        }
+        draw(m_terrain, grid::srcTile(kFillCol + v, fillRow), vx, vy);
+        continue;
+      }
+      // Sand coast where the sea or a beach is involved (a river mouth on a
+      // beach would otherwise show a mud bank's body on the sand).
+      bool sandy = false;
+      for (Biome b : c)
+        sandy = sandy || b == Biome::OCEAN || b == Biome::BEACH;
+      if (layer != GROUND || !sandy) {
         draw(m_terrain, grid::srcTile(mask, row), vx, vy);
       } else if (mask == 6 || mask == 9) {
         // The coast set has no diagonal: two single corners make one.
