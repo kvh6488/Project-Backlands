@@ -2,7 +2,7 @@
 
 **Status:** approved 2026-09-11 (`tools/palette_sample.py --config yellow12`, 56
 colours); extended for the overworld 2026-10-06 (+16, 72 colours, see
-"Overworld additions") and for the grass-to-forest fade the same day (+2, 74).
+"Overworld additions") for the grass-to-forest fade the same day (+2, 74), and for the swamp-water tints (+3, 77).
 Every PNG in `assets/` is quantized to it; `python tools/quantize.py --check assets/`
 is the acceptance test and must stay at 100 %.
 
@@ -182,6 +182,7 @@ byte-identical.
 | `#065c39` `#1b7758` | green | deep green; the teal LightBorne canopies take |
 | `#6a8657` `#7b9664` | green | LightBorne olive greens |
 | `#0f5f5b` | blue | Pixel Crawler's teal pines |
+| `#4b8295` `#48737c` `#456563` | blue | swamp water's tints (ow_swamp_water.png): the OKLab mixes of lake `#4e91af` and swamp murk `#41564b` at 1/4, 1/2, 3/4. Mixed, not sampled; the build script keeps them out of the packs' quantization, so no pack pixel snaps to them. `theme`'s blue steps were renumbered to match |
 | `#55834c` `#53763e` | green | the grass-to-forest fade (ow_shades.png): the OKLab midpoint of grass `#3d7f41` and forest floor `#6a8657`, and of grass detail `#3c6723` and `#6a8657`. Mixed, not sampled; approved over a no-new-colours version after side-by-side screenshots |
 
 Deliberate effects, kept by leaving colours *out*: Pixel Crawler grass and

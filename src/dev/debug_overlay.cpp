@@ -492,8 +492,8 @@ void DebugOverlay::generateIslandMap(const Overworld &world) {
       if (m_islandView == 0) {
         c = OverworldRenderer::biomeColour(s.biome);
       } else if (s.height < 0.0f) {
-        // Deep to shallow; blue[2] is the teal pine colour, not a water step.
-        static constexpr int kDepth[] = {0, 1, 3};
+        // Deep to shallow; blue[2] is the teal pine, 3, 5 and 6 the swamp blends.
+        static constexpr int kDepth[] = {0, 1, 4};
         c = pal::blue[kDepth[std::clamp(2 + (int)(s.height * 8.0f), 0, 2)]];
       } else {
         c = pal::neutral[std::clamp(1 + (int)(s.height * 7.0f), 1, 7)];

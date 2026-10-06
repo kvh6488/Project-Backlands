@@ -580,6 +580,28 @@ TEST(OverworldRendererTest, FadeShareRampsAcrossABorder) {
   EXPECT_FLOAT_EQ(s[row + 5], 0.5f);
 }
 
+TEST(OverworldRendererTest, SwampStepsRiseAwayFromOpenWater) {
+  // 12 x 5, all water: open in columns 0-1, swamp from column 2 on.
+  constexpr int W = 12, H = 5;
+  std::vector<uint8_t> water(W * H, 1), swamp(W * H);
+  for (int k = 0; k < W * H; ++k)
+    swamp[k] = k % W >= 2;
+  std::vector<uint8_t> lv;
+  OverworldRenderer::swampLevels(water, swamp, W, H, lv);
+  const int row = 2 * W;
+  const int want[W] = {0, 0, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4};
+  for (int x = 0; x < W; ++x)
+    EXPECT_EQ(lv[row + x], want[x]) << "column " << x;
+
+  // A land column at 4 cuts the swamp beyond it off from the open water:
+  // steps are counted through water only.
+  for (int y = 0; y < H; ++y)
+    water[y * W + 4] = swamp[y * W + 4] = 0;
+  OverworldRenderer::swampLevels(water, swamp, W, H, lv);
+  EXPECT_EQ(lv[row + 3], 2);
+  EXPECT_EQ(lv[row + 5], OverworldRenderer::kSwampSteps);
+}
+
 TEST(OverworldRendererTest, SpriteFramesDoNotOverlapInTheAtlas) {
   using owsprite::kFrames;
   for (int i = 0; i < owsprite::COUNT; ++i) {

@@ -19,7 +19,11 @@ Outputs, all the renderer loads:
                   with itself, with light dashes and a few lighter ones; the
                   renderer samples it by world position plus a slow
                   diagonal sway
-  ow_swamp_water.png  swamp water, the same way: murk flecked with duckweed
+  ow_swamp_water.png  swamp water, the same way: murk flecked with duckweed,
+                  in four 64px squares stacked down the sheet - three tints
+                  a quarter, half and three quarters of the way from lake
+                  blue to the murk, then the murk itself. The renderer steps
+                  through them away from open water
   ow_glints.png   a glint's three frames (a spark, a cross, a spark)
   ow_river.png    flowing water: one 64px square that tiles with itself, which
                   the renderer scrolls downstream (dashes a little denser than
@@ -422,15 +426,29 @@ def water_sheet():
     return dashed_water(6, 17, [("#91d6e8", 0.25), ("#6ea7c6", 0.75)])
 
 
+# Swamp water's tints, open water toward full murk: the murk (and what the
+# duckweed and ripples become) per step. The blends are the OKLab mixes of
+# lake blue #4e91af and murk #41564b at 1/4, 1/2 and 3/4, added to the
+# palette for this; the faintest step has no duckweed yet.
+SWAMP_BLENDS = ["#4b8295", "#48737c", "#456563"]
+SWAMP_TINTS = [
+    {"#41564b": "#4b8295", "#3d7f41": "#4b8295", "#6a8657": "#4b8295", "#576477": "#6ea7c6"},
+    {"#41564b": "#48737c", "#3d7f41": "#456563", "#576477": "#4b8295"},
+    {"#41564b": "#456563"},
+    {},
+]
+
+
 def swamp_water_sheet():
-    """Swamp water: the swamp fills laid 4 x 4 in a fixed shuffle. Their
-    flecks stay off the tile edges, so the square tiles with itself."""
+    """Swamp water: the swamp fills laid 4 x 4 in a fixed shuffle (their
+    flecks stay off the tile edges, so the square tiles with itself), once
+    per tint, the squares stacked down the sheet."""
     fills = swamp_fills()
     order = np.random.default_rng(41).permutation(16) % len(fills)
     a = np.zeros((4 * T, 4 * T, 4), np.uint8)
     for i, v in enumerate(order):
         a[i // 4 * T:(i // 4 + 1) * T, i % 4 * T:(i % 4 + 1) * T] = fills[v]
-    return a
+    return np.concatenate([recolour(a, tint) for tint in SWAMP_TINTS], axis=0)
 
 
 def glints_sheet():
@@ -633,8 +651,9 @@ def fades_sheet(src, pal):
 
 
 def swamp_masks(lb):
-    """Where swamp water draws on a dual-grid corner, by `open` - the corner's
-    open-water cells (TL=8 TR=4 BL=2 BR=1). Land counts with the swamp: the
+    """Where a swamp tint draws on a dual-grid corner, by `open` - the
+    corner's water cells below that tint (TL=8 TR=4 BL=2 BR=1). Land counts
+    with the swamp: the
     bank covers it either way, and the swamp then reaches right to its shore.
     Like a shade overlay, the swamp dithers out over SHADE_BAND px inward
     from LightBorne's shape. Column 15 (all open water) stays clear."""
@@ -836,7 +855,10 @@ def main():
     ap.add_argument("--dump", help="also write every quantized crop here, for review")
     a = ap.parse_args()
     pal = load_palette(a.palette)
-    src = load_sources(a.packs, pal)
+    # The swamp blends were mixed for the generated swamp water; kept out of
+    # the packs' quantization so no tree pixel snaps to them.
+    keep = np.array([tuple(c) not in {hexrgb(h) for h in SWAMP_BLENDS} for c in pal[0]])
+    src = load_sources(a.packs, (pal[0][keep], pal[1][keep]))
     src["gen"] = generated_decals(src)
     if a.dump:
         os.makedirs(a.dump, exist_ok=True)

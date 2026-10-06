@@ -265,6 +265,7 @@ void OverworldRenderer::loadTextures() {
   m_locLayer = GetShaderLocation(m_fade, "layer");
   m_locSwampWater = GetShaderLocation(m_fade, "swampWater");
   m_locSway = GetShaderLocation(m_fade, "sway");
+  m_locLevel = GetShaderLocation(m_fade, "level");
 }
 
 Color OverworldRenderer::biomeColour(Biome b) {
@@ -325,6 +326,32 @@ void OverworldRenderer::shareWithin(const std::vector<uint8_t> &in,
   }
 }
 
+void OverworldRenderer::swampLevels(const std::vector<uint8_t> &water,
+                                    const std::vector<uint8_t> &swamp, int w, int h,
+                                    std::vector<uint8_t> &out) {
+  const int n = w * h;
+  out.assign(n, (uint8_t)kSwampSteps);
+  std::vector<int> queue;
+  for (int k = 0; k < n; ++k)
+    if (water[k] && !swamp[k]) {
+      out[k] = 0;
+      queue.push_back(k);
+    }
+  for (size_t head = 0; head < queue.size(); ++head) {
+    const int k = queue[head], x = k % w, y = k / w;
+    if (out[k] + 1 >= kSwampSteps)
+      continue;
+    for (int dy = -1; dy <= 1; ++dy)
+      for (int dx = -1; dx <= 1; ++dx) {
+        const int nx = x + dx, ny = y + dy, nk = ny * w + nx;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h || !swamp[nk] || out[nk] <= out[k] + 1)
+          continue;
+        out[nk] = (uint8_t)(out[k] + 1);
+        queue.push_back(nk);
+      }
+  }
+}
+
 void OverworldRenderer::renderTerrain(const Overworld &world,
                                       const Camera2D &camera,
                                       const Viewport &canvas, float time) {
@@ -335,9 +362,7 @@ void OverworldRenderer::renderTerrain(const Overworld &world,
   m_time = time;
   m_world = &world;
 
-  // Dual-grid vertices x0..x0+w each read the cells on both sides, and a
-  // fade weight reads kFadeRadius further: the cache reaches that far out.
-  constexpr int kMargin = 1 + kFadeRadius;
+  constexpr int kMargin = kCacheMargin;
   m_cellsX0 = x0 - kMargin;
   m_cellsY0 = y0 - kMargin;
   m_cellsW = w + 2 * kMargin;
@@ -371,9 +396,9 @@ void OverworldRenderer::renderTerrain(const Overworld &world,
                        {0, 0}, 0.0f, WHITE);
         continue;
       }
-      // Still water, by world position; lakes sway, the sea does not.
-      const int s = c.biome == Biome::OCEAN ? 0 : sway;
-      Rectangle src = {(float)(x * grid::SOURCE_TILE + s), (float)(y * grid::SOURCE_TILE + s),
+      // Still water, by world position, swaying.
+      Rectangle src = {(float)(x * grid::SOURCE_TILE + sway),
+                       (float)(y * grid::SOURCE_TILE + sway),
                        (float)grid::SOURCE_TILE, (float)grid::SOURCE_TILE};
       DrawTexturePro(m_water, src, grid::destFor(src, x * grid::CELL, y * grid::CELL),
                      {0, 0}, 0.0f, WHITE);
@@ -420,19 +445,20 @@ void OverworldRenderer::drawGlints(int x0, int y0, int w, int h) const {
 
 // Per cell of the view (plus the one-cell rim the dual grid reads): how much
 // of each land fade material is there - its share of the grass's cells
-// within kFadeRadius, so a shore never thins a fade - and which cells are
-// land and which swamp water. Uploaded as two small textures; the shader
-// reads the weights bilinear and the flags per cell. Also marks how near a
+// within kFadeRadius, so a shore never thins a fade - which cells are land,
+// and each water cell's swamp step. Uploaded as two small textures; the
+// shader reads the weights bilinear and the rest per cell. Also marks how near a
 // beach each cache cell is, for the bank rows.
 void OverworldRenderer::buildFades(int x0, int y0, int w, int h) {
   const int n = m_cellsW * m_cellsH;
-  std::vector<uint8_t> land(n), all(n, 1);
+  std::vector<uint8_t> land(n), water(n), all(n, 1), levels;
   std::vector<uint8_t> in[6]; // wetland, gravel, snow, drift, swamp, beach
   for (auto &v : in)
     v.resize(n);
   for (int k = 0; k < n; ++k) {
     const Cell &c = m_cells[k];
     land[k] = inLayer(GRASS, c.biome, c.shade);
+    water[k] = isWater(c.biome);
     in[0][k] = c.biome == Biome::WETLAND;
     in[1][k] = c.biome == Biome::MOUNTAIN || c.biome == Biome::SNOW; // gravel runs under snow
     in[2][k] = c.biome == Biome::SNOW;
@@ -443,6 +469,7 @@ void OverworldRenderer::buildFades(int x0, int y0, int w, int h) {
   std::vector<float> share[4], beach1, beach2;
   for (int f = 0; f < 4; ++f)
     shareWithin(in[f], land, m_cellsW, m_cellsH, kFadeRadius, share[f]);
+  swampLevels(water, in[4], m_cellsW, m_cellsH, levels);
   shareWithin(in[5], all, m_cellsW, m_cellsH, 1, beach1);
   shareWithin(in[5], all, m_cellsW, m_cellsH, 2, beach2);
   for (int k = 0; k < n; ++k)
@@ -459,11 +486,13 @@ void OverworldRenderer::buildFades(int x0, int y0, int w, int h) {
     u = false;
   for (int j = 0; j < th; ++j) {
     for (int i = 0; i < tw; ++i) {
-      const int k = (j + kFadeRadius) * m_cellsW + (i + kFadeRadius);
+      const int k = (j + kCacheMargin - 1) * m_cellsW + (i + kCacheMargin - 1);
       Color &wpx = m_weightPx[j * tw + i];
       wpx = {byte(share[0][k]), byte(share[1][k]), byte(share[2][k]), byte(share[3][k])};
+      // g: the swamp step in quarters (texelFetch reads it back exactly).
       m_infoPx[j * tw + i] = {(unsigned char)(land[k] ? 255 : 0),
-                              (unsigned char)(in[4][k] ? 255 : 0), 0, 255};
+                              (unsigned char)(water[k] ? levels[k] * 255 / kSwampSteps : 0),
+                              0, 255};
       m_fadeUsed[FADE_SWAMP] |= in[4][k] != 0;
       m_fadeUsed[FADE_WETLAND] |= wpx.r > 0;
       m_fadeUsed[FADE_GRAVEL] |= wpx.g > 0;
@@ -492,6 +521,14 @@ void OverworldRenderer::buildFades(int x0, int y0, int w, int h) {
 void OverworldRenderer::drawFade(int fade, int x0, int y0, int w, int h) const {
   if (!m_fadeUsed[fade] || m_fade.id == 0)
     return;
+  // Swamp water is one pass per tint step, each over the one before.
+  const int passes = fade == FADE_SWAMP ? kSwampSteps : 1;
+  for (int level = 1; level <= passes; ++level)
+    drawFadePass(fade, level, x0, y0, w, h);
+}
+
+void OverworldRenderer::drawFadePass(int fade, int level, int x0, int y0, int w,
+                                     int h) const {
   BeginShaderMode(m_fade);
   SetShaderValueTexture(m_fade, m_locWeights, m_weights);
   SetShaderValueTexture(m_fade, m_locInfo, m_info);
@@ -501,6 +538,7 @@ void OverworldRenderer::drawFade(int fade, int x0, int y0, int w, int h) const {
   SetShaderValueTexture(m_fade, m_locSwampWater, m_swampWater);
   const int sway[2] = {swayAt(m_time), swayAt(m_time)};
   SetShaderValue(m_fade, m_locSway, sway, SHADER_UNIFORM_IVEC2);
+  SetShaderValue(m_fade, m_locLevel, &level, SHADER_UNIFORM_INT);
   const Rectangle src = {(float)(x0 * grid::SOURCE_TILE), (float)(y0 * grid::SOURCE_TILE),
                          (float)(w * grid::SOURCE_TILE), (float)(h * grid::SOURCE_TILE)};
   DrawTexturePro(m_fades, src, grid::destFor(src, x0 * grid::CELL, y0 * grid::CELL),

@@ -35,12 +35,13 @@
 // bilinear, beats an ordered-dither threshold - so any two of them blend over
 // several tiles. Land fades are clipped to the grass's corner shapes at the
 // shore and take their own outline colour there. Swamp water goes through
-// the same shader but fades like a shade overlay: per dual-grid corner, a
-// mask chosen by which cells are open water dithers it out over a few px.
+// the same shader in steps (swampLevels): four tints, lake blue toward murk,
+// each covering the swamp cells at least that far from open water. Like the
+// shade overlays, each step dithers out over a few px at its edge.
 //
 // STILL WATER is one repeating texture sampled at world position, like the
-// river; lakes and swamps sway it a pixel or two along the diagonal, and a
-// few open-water tiles glint.
+// river; lakes, swamps and the sea sway it a pixel or two along the
+// diagonal, and a few open-water tiles glint.
 //
 // ROOTS IN WATER: where one of the widest-rooted props (willow, the big
 // oak) spills onto a river tile, that slice laps through dry, foam line,
@@ -93,6 +94,14 @@ public:
                           int radius, std::vector<float> &out);
   // How far (tiles) a fade reaches either side of a border.
   static constexpr int kFadeRadius = 2;
+  // Swamp water's tint steps: a swamp cell d steps from open water (through
+  // water, 8-connected) takes step min(d, kSwampSteps); open water is 0,
+  // land and cells no open water reaches within the grid kSwampSteps.
+  // A capped multi-source BFS. Pure.
+  static constexpr int kSwampSteps = 4;
+  static void swampLevels(const std::vector<uint8_t> &water,
+                          const std::vector<uint8_t> &swamp, int w, int h,
+                          std::vector<uint8_t> &out);
 
   // The sprite a prop draws as. Pure: same prop, same sprite.
   static owsprite::Id spriteFor(PropType type, Biome biome, uint8_t variant);
@@ -133,6 +142,7 @@ private:
   void drawLayer(int layer, int x0, int y0, int w, int h, int frame) const;
   void buildFades(int x0, int y0, int w, int h);
   void drawFade(int fade, int x0, int y0, int w, int h) const;
+  void drawFadePass(int fade, int level, int x0, int y0, int w, int h) const;
   void drawDecals(int x0, int y0, int w, int h) const;
   void drawGlints(int x0, int y0, int w, int h) const;
   // A cached cell, by world (unwrapped) tile.
@@ -144,7 +154,7 @@ private:
       m_shades{}, m_fades{}, m_props{}, m_propsWet{};
   Shader m_fade{};
   int m_locWeights = -1, m_locInfo = -1, m_locOrigin = -1, m_locLayer = -1,
-      m_locSwampWater = -1, m_locSway = -1;
+      m_locSwampWater = -1, m_locSway = -1, m_locLevel = -1;
   // The fade shader's per-cell data, rebuilt per frame: textures, their
   // pixels, the world cell of texel (0, 0), and which fades are in view.
   Texture2D m_weights{}, m_info{};
@@ -154,9 +164,12 @@ private:
   const Overworld *m_world = nullptr;
   Vector2 m_focus{};
   float m_time = 0.0f; // renderTerrain's, for the lapping roots, glints and sway
-  // The cells around the view, kFadeRadius + 1 past it on every side,
-  // rebuilt per frame so the layers' lookups are array reads rather than
-  // chunk queries.
+  // The cells around the view, kCacheMargin past it on every side, rebuilt
+  // per frame so the layers' lookups are array reads rather than chunk
+  // queries. The dual grid reads 1 cell past the view, and from there a fade
+  // weight reads kFadeRadius further and a swamp step up to kSwampSteps - 1.
+  static constexpr int kCacheMargin =
+      1 + (kFadeRadius > kSwampSteps - 1 ? kFadeRadius : kSwampSteps - 1);
   std::vector<Cell> m_cells;
   int m_cellsX0 = 0, m_cellsY0 = 0, m_cellsW = 0, m_cellsH = 0;
 };

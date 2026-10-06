@@ -30,8 +30,8 @@ inline constexpr Color radiationGlow = pal::accent[5];  // barrel halos, additiv
 // Overworld biome fills: the debug island map paints these (the surface
 // itself draws its tile sheets).
 inline constexpr Color ocean = pal::blue[0];
-inline constexpr Color lake = pal::blue[3];
-inline constexpr Color river = pal::blue[4];
+inline constexpr Color lake = pal::blue[4];
+inline constexpr Color river = pal::blue[7];
 inline constexpr Color swamp = pal::grey[4];
 inline constexpr Color beach = pal::yellow[9];
 inline constexpr Color grassland = pal::green[11];

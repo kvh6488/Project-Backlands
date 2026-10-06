@@ -4,11 +4,13 @@
 // ow_fade - one fade material (swamp water, wetland, gravel, snow, drift)
 // drawn pixel by pixel over the view. OverworldRenderer::drawFade.
 //
-// SWAMP WATER (layer 0) is not a weighted fade: at each dual-grid corner it
-// reads which of the four cells are open water and keeps the pixels that
-// corner's mask keeps (the sheet's first row, dithered in along LightBorne's
-// shape) - the shade overlays' fade, done here because the swamp texture
-// sways and so cannot be baked into tiles.
+// SWAMP WATER (layer 0) is not a weighted fade. It is drawn in passes, one
+// per tint `level` (1 faint .. 4 full murk), each over the last. A pass
+// covers the cells whose swamp step is at least `level`: at each dual-grid
+// corner it reads which water cells fall short of that and keeps the pixels
+// that corner's mask keeps (the sheet's first row, dithered in along
+// LightBorne's shape) - the shade overlays' fade, done here because the
+// swamp texture sways and so cannot be baked into tiles.
 // ============================================================================
 // COVERAGE. `weights` / `info` hold, per cell, the share of nearby cells that
 // are this material. Sampled bilinear, that is a smooth 0..1 ramp across a
@@ -31,8 +33,9 @@ in vec4 fragColor;
 
 uniform sampler2D texture0; // assets/ow_fades.png
 uniform sampler2D weights;  // per cell: wetland, gravel, snow, drift
-uniform sampler2D info;     // per cell: r = land (grass) flag, g = swamp water flag
-uniform sampler2D swampWater; // assets/ow_swamp_water.png, a square that tiles
+uniform sampler2D info;     // per cell: r = land (grass) flag, g = swamp step / 4
+uniform sampler2D swampWater; // assets/ow_swamp_water.png: a tiling square per level
+uniform int level;          // swamp water's tint pass, 1..4
 uniform ivec2 sway;         // the still water's offset now, art px
 uniform ivec2 cellOrigin;   // world cell of texel (0, 0) in weights and info
 uniform int layer;          // the sheet row: 0 swamp, 1 wetland, 2 gravel, 3 snow, 4 drift
@@ -69,11 +72,14 @@ bool isLand(ivec2 cell) {
   return texelFetch(info, cell - cellOrigin, 0).r > 0.5;
 }
 
-// Open water: neither land nor swamp.
+// Water short of this pass's level sets its bit; `swamp` notes a cell at
+// or past it.
 int openBit(ivec2 cell, int bit, inout bool swamp) {
   vec4 i = texelFetch(info, cell - cellOrigin, 0);
-  swamp = swamp || i.g > 0.5;
-  return i.r < 0.5 && i.g < 0.5 ? bit : 0;
+  int step = int(i.g * 4.0 + 0.5);
+  bool land = i.r > 0.5;
+  swamp = swamp || (!land && step >= level);
+  return !land && step < level ? bit : 0;
 }
 
 void main() {
@@ -89,9 +95,9 @@ void main() {
                openBit(v + ivec2(-1, 0), 2, swamp) | openBit(v, 1, swamp);
     if (!swamp || texelFetch(texture0, ivec2(open * T + local.x, local.y), 0).a < 0.5)
       discard;
-    ivec2 size = textureSize(swampWater, 0);
-    ivec2 at = ivec2(mod(vec2(px + sway), vec2(size))); // GLSL % is undefined below 0
-    finalColor = vec4(texelFetch(swampWater, at, 0).rgb, 1.0);
+    int side = textureSize(swampWater, 0).x; // the squares are stacked down the sheet
+    ivec2 at = ivec2(mod(vec2(px + sway), float(side))); // GLSL % is undefined below 0
+    finalColor = vec4(texelFetch(swampWater, at + ivec2(0, (level - 1) * side), 0).rgb, 1.0);
     return;
   }
 
