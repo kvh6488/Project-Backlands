@@ -218,6 +218,11 @@ owsprite::Id pickFrom(std::span<const Pick> pool, uint32_t r) {
 
 constexpr uint32_t kDecalSalt = 0x68e31da4u;
 
+// Roots in water lap through four stages, each this long; a tree starts at a
+// stage of its own so the shore does not pulse in step.
+constexpr float kLapSecondsFlowing = 0.25f, kLapSecondsStill = 0.5f;
+constexpr uint32_t kLapSalt = 0x3c6ef372u;
+
 constexpr float kCoverAlpha = 0.45f;
 
 constexpr int widestFrame() {
@@ -288,6 +293,7 @@ void OverworldRenderer::renderTerrain(const Overworld &world,
   const int x0 = view.startX, y0 = view.startY;
   const int w = view.endX - x0 + 1, h = view.endY - y0 + 1;
   const uint32_t seed = world.island().seed();
+  m_time = time;
 
   // Dual-grid vertices x0..x0+w each read the cells on both sides, so the
   // cache starts one cell up-left of the view and is two cells wider.
@@ -490,16 +496,24 @@ void OverworldRenderer::drawQueued(int x, int y) const {
   const Color tint = covers ? Fade(WHITE, kCoverAlpha) : WHITE;
 
   // Roots wider than the tile spill onto the cells beside it. Over water,
-  // that slice of the bottom row draws from the submerged copy instead.
+  // that slice of the bottom row laps: dry, foam, sunk, foam (stage 0-3).
   // Frames are centred on the tile, so a slice boundary can fall mid-column;
   // slices are cut at world cell edges, in canvas px.
   const float bottomY = dest.y + dest.height - grid::CELL;
   const int cx0 = (int)std::floor(dest.x / grid::CELL);
   const int cx1 = (int)std::ceil((dest.x + dest.width) / grid::CELL) - 1;
-  bool wet = false;
-  for (int cx = cx0; cx <= cx1 && !wet; ++cx)
-    wet = cx != x && isWater(m_world->biomeAt(cx, y));
-  if (!wet) {
+  bool wet = false, flowing = false;
+  for (int cx = cx0; cx <= cx1; ++cx) {
+    if (cx != x && isWater(m_world->biomeAt(cx, y))) {
+      wet = true;
+      flowing = flowing || m_world->flowAt(cx, y) != 0;
+    }
+  }
+  const int phase = (int)(noise::hash(m_world->wrapX(x), m_world->wrapY(y),
+                                      m_world->island().seed() ^ kLapSalt) % 4);
+  const int stage =
+      ((int)(m_time / (flowing ? kLapSecondsFlowing : kLapSecondsStill)) + phase) % 4;
+  if (!wet || stage == 0) {
     DrawTexturePro(m_props, src, dest, {0, 0}, 0.0f, tint);
     return;
   }
@@ -514,8 +528,9 @@ void OverworldRenderer::drawQueued(int x, int y) const {
       continue;
     const bool sunk = cx != x && isWater(m_world->biomeAt(cx, y));
     const float sx = (left - dest.x) / grid::WORLD_SCALE;
+    const int wetRow = f.wetRow + (stage == 2 ? 1 : 0);
     Rectangle piece = {src.x + sx,
-                       sunk ? (float)(f.wetRow * grid::SOURCE_TILE)
+                       sunk ? (float)(wetRow * grid::SOURCE_TILE)
                             : src.y + src.height - grid::SOURCE_TILE,
                        (right - left) / grid::WORLD_SCALE, (float)grid::SOURCE_TILE};
     DrawTexturePro(sunk ? m_propsWet : m_props, piece,

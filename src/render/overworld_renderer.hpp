@@ -29,6 +29,9 @@
 // A layer's tiles are transparent outside its shape, so the layer beneath
 // shows through and a three-biome corner needs no special tile.
 //
+// ROOTS IN WATER: where a prop's root row spills onto a water tile, that
+// slice laps through dry, foam line, sunk, foam line - faster on a river.
+//
 // RIVERS FLOW: river water is one repeating texture sampled at the tile's
 // world position, shifted downstream by time along the tile's flow step. The
 // banks drawn over it stay put, so the water slides past them.
@@ -104,6 +107,7 @@ private:
       m_propsWet{};
   const Overworld *m_world = nullptr;
   Vector2 m_focus{};
+  float m_time = 0.0f; // renderTerrain's, for the props' lapping water
   // The cells around the view, (w+2) x (h+2), rebuilt per frame so each
   // layer's corner lookups are array reads rather than chunk queries.
   struct Cell {

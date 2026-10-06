@@ -28,8 +28,10 @@ Outputs, all the renderer loads:
                   and a generated mud BANK row: LightBorne's shapes grown 4 px
                   into the water, the lip a lake or river shows past the grass
   ow_props.png    every tree, bush, rock and reed, repacked on the 16px grid
-  ow_props_wet.png  each prop's bottom tile row again, "submerged": the
-                  lower pixels dithered away, for roots that spill onto water
+  ow_props_wet.png  each prop's bottom tile row twice more, for roots that
+                  spill onto water: with a foam line at the waterline, and
+                  sunk (lower pixels dithered away). The renderer laps
+                  between dry, foam and sunk
   src/render/overworld_sprites.hpp   where each prop sits in ow_props.png
 
 CORNER TILES. The renderer autotiles on a dual grid: a tile is drawn on each
@@ -224,6 +226,7 @@ PROPS = (
 # are a lime that glows against every other tree: one step darker each.
 PROP_RECOLOUR = {f"PC1_S{s}_GREEN": {"#91ca51": "#69a754", "#69a754": "#55834c"} for s in (2, 3, 4, 5)}
 ATLAS_TILES = 40  # atlas width in tiles
+WATERLINE = 11    # art-px row of a prop's bottom tile the lapping water reaches
 
 
 def snow_cap(rock):
@@ -654,22 +657,32 @@ def props_atlas(src):
     for i, (c, r, fw, fh) in place.items():
         atlas[r * T:(r + fh) * T, c * T:(c + fw) * T] = sprites[i][1]
 
-    # The submerged bottom rows: one strip row per shelf (frames on a shelf
-    # never overlap horizontally), at the frame's own columns.
+    # The wet bottom rows: two strip rows per shelf (frames on a shelf never
+    # overlap horizontally), foam then sunk, at the frame's own columns.
     shelf_tops = sorted({r for _, r, _, _ in place.values()})
-    wet = np.zeros((len(shelf_tops) * T, ATLAS_TILES * T, 4), np.uint8)
+    wet = np.zeros((2 * len(shelf_tops) * T, ATLAS_TILES * T, 4), np.uint8)
     yy, xx = np.mgrid[0:T, 0:T]
-    # Fully kept down to row 6, then thinning to almost nothing at the base:
-    # roots sinking into the water. Ordered dither, so it stays crisp.
-    keep = BAYER4[yy % 4, xx % 4] < np.clip((T - 1 - yy) / 9.0, 0, 1) * 16
+    # Sunk: fully kept down to row 6, then thinning to almost nothing at the
+    # base. Ordered dither, so it stays crisp.
+    sunk = BAYER4[yy % 4, xx % 4] < np.clip((T - 1 - yy) / 9.0, 0, 1) * 16
+    # Foam: the water risen to WATERLINE - a light line where the roots cut
+    # it, one px wider each side, and half the root showing below.
+    half = (yy <= WATERLINE) | (BAYER4[yy % 4, xx % 4] < 8)
+    foam_rgb = hexrgb("#91d6e8")
     frames = []
     for i in range(len(sprites)):
         c, r, fw, fh = place[i]
         k = shelf_tops.index(r)
-        bottom = sprites[i][1][(fh - 1) * T:fh * T].copy()
-        bottom[~np.tile(keep, (1, fw))] = 0
-        wet[k * T:(k + 1) * T, c * T:(c + fw) * T] = bottom
-        frames.append((c, r, fw, fh, k))
+        bottom = sprites[i][1][(fh - 1) * T:fh * T]
+        foam = bottom.copy()
+        foam[~np.tile(half, (1, fw))] = 0
+        line = np.pad(bottom[WATERLINE, :, 3] > 0, 1)
+        foam[WATERLINE, line[:-2] | line[1:-1] | line[2:]] = (*foam_rgb, 255)
+        down = bottom.copy()
+        down[~np.tile(sunk, (1, fw))] = 0
+        wet[2 * k * T:(2 * k + 1) * T, c * T:(c + fw) * T] = foam
+        wet[(2 * k + 1) * T:(2 * k + 2) * T, c * T:(c + fw) * T] = down
+        frames.append((c, r, fw, fh, 2 * k))
     return atlas, wet, frames
 
 
@@ -684,8 +697,9 @@ def write_header(frames, path):
            "// its base on its bottom edge, so grid::standingOn(frame, x, y) roots it on",
            "// tile (x, y).", "",
            "namespace owsprite {", "",
-           "// wetRow: the row of ow_props_wet.png holding the frame's submerged",
-           "// bottom row, at the same columns.",
+           "// wetRow: the row of ow_props_wet.png holding the frame's bottom row",
+           "// with a foam line at the waterline; wetRow + 1 holds it sunk. Same",
+           "// columns as the frame.",
            "struct Frame {", "  int col, row, w, h, wetRow;", "};", "",
            "enum Id : int {"]
     out += [f"  {n}," for n in names]
