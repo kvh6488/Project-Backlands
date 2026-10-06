@@ -219,7 +219,7 @@ TEST(JsonWriterTest, FloatsRoundTrip) {
 // CLI
 // ---------------------------------------------------------------------------
 TEST(HeadlessModeTest, ParsesArgsAndDefaultsOutDir) {
-  const char *argv[] = {"Backrooms.exe", "--headless", "../scenarios/smoke.txt",
+  const char *argv[] = {"Backlands.exe", "--headless", "../scenarios/smoke.txt",
                         "--ticks", "500"};
   headless::Options o = headless::parseArgs(5, (char **)argv);
   EXPECT_TRUE(o.error.empty()) << o.error;
@@ -231,9 +231,9 @@ TEST(HeadlessModeTest, ParsesArgsAndDefaultsOutDir) {
   EXPECT_EQ(out.filename(), "smoke");
   EXPECT_EQ(out.parent_path().filename(), "artifacts");
 
-  const char *bad[] = {"Backrooms.exe", "--headless"};
+  const char *bad[] = {"Backlands.exe", "--headless"};
   EXPECT_FALSE(headless::parseArgs(2, (char **)bad).error.empty());
-  const char *none[] = {"Backrooms.exe", "--seed", "3"};
+  const char *none[] = {"Backlands.exe", "--seed", "3"};
   EXPECT_FALSE(headless::parseArgs(3, (char **)none).enabled);
 }
 

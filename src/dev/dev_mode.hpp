@@ -7,8 +7,8 @@
 // and trip forcing) is a development tool, not a game feature. Two switches
 // keep it out of the way:
 //
-//   Backrooms.exe            -> tools unavailable; F1 does nothing
-//   Backrooms.exe --dev      -> tools armed and visible; F1 hides/shows them
+//   Backlands.exe            -> tools unavailable; F1 does nothing
+//   Backlands.exe --dev      -> tools armed and visible; F1 hides/shows them
 //
 // This is a *runtime* gate, so the code still ships inside the binary. When
 // the game gets a real release build, wrap the DebugOverlay in a compile-time

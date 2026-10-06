@@ -1,4 +1,4 @@
-# Project Backrooms
+# Project Backlands
 
 A 2D top-down maze survival game built in modern C++20, using Raylib for rendering and Dear ImGui for in-engine debug tooling. The game systems — procedural generation, visibility, lighting, hazards, items and crafting — are written from scratch rather than taken from an engine.
 
@@ -108,7 +108,7 @@ The suite asserts invariants rather than getters — the properties that must ho
 Most tests pin a fixed seed so they stay deterministic. `FullConnectivityEnsured` deliberately does the opposite — it draws a fresh seed from the clock on every run, so it validates a newly generated maze each time rather than one memorised layout. It records that seed into the GoogleTest XML output:
 
 ```bash
-./BackroomsTests --gtest_output=xml:results.xml
+./BacklandsTests --gtest_output=xml:results.xml
 ```
 
 which yields `<property name="RandomSeed" value="1788478678"/>`. Hardcode that value back into the test to reproduce a failure exactly.
@@ -120,8 +120,8 @@ which yields `<property name="RandomSeed" value="1788478678"/>`. Hardcode that v
 **Requirements:** CMake 3.14+ and a C++20 compiler. Developed and tested with GCC 15.2; MSVC 2019+ and Clang 12+ are expected to work but are not currently verified. Raylib 5.0, Dear ImGui, rlImGui and GoogleTest are fetched automatically via CMake `FetchContent` — the first configure needs network access, but there is no manual dependency setup.
 
 ```bash
-git clone https://github.com/kvh6488/Project-Backrooms.git
-cd Project-Backrooms
+git clone https://github.com/kvh6488/Project-Backlands.git
+cd Project-Backlands
 cmake -S . -B build
 cmake --build build -j
 ```
@@ -132,8 +132,8 @@ The game **must be run with `build/` as the working directory**, since assets ar
 
 ```bash
 cd build
-./Backrooms        # the game
-./BackroomsTests   # the test suite
+./Backlands        # the game
+./BacklandsTests   # the test suite
 ```
 
 Assets are copied into the build directory at *configure* time, so re-run the configure step after editing anything under `assets/`.

@@ -34,7 +34,7 @@ PATH="/c/ProgramData/mingw64/mingw64/bin:$PATH" cmake --build --preset mingw-deb
 
 The `PATH` prefix matters from Git Bash: both executables link MinGW's
 `libstdc++-6.dll`, and `gtest_discover_tests` runs the test exe at link time.
-Without it the build silently deletes `BackroomsTests.exe` and the game dies
+Without it the build silently deletes `BacklandsTests.exe` and the game dies
 with exit 127 and no output.
 
 ## 3. Pick or write a scenario
@@ -69,7 +69,7 @@ I O U Q 1-5`). Rules that decide whether a scenario is worth anything:
 ## 4. Run
 
 ```bash
-cd build && PATH="/c/ProgramData/mingw64/mingw64/bin:$PATH" ./Backrooms.exe --headless ../scenarios/<name>.txt --out ../artifacts/<name>
+cd build && PATH="/c/ProgramData/mingw64/mingw64/bin:$PATH" ./Backlands.exe --headless ../scenarios/<name>.txt --out ../artifacts/<name>
 ```
 
 Outputs land in `artifacts/<name>/`: `run.json` (seed, ticks, checkpoint

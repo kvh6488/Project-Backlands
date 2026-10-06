@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(ProjectBackrooms CXX)
+project(ProjectBacklands CXX)
 
 # Fix for CMake 3.30+ crashing on raylib 5.0's older cmake_minimum_required(2.8)
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE INTERNAL "")
@@ -55,7 +55,7 @@ file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets DESTINATION ${CMAKE_CURRENT_BINARY_
 # (main.cpp for the game, gtest_main for the tests). Listing the sources once
 # means adding a new .cpp is a single edit - the old duplicated lists silently
 # broke the test link whenever only one of them was updated.
-set(BACKROOMS_GAME_SOURCES
+set(BACKLANDS_GAME_SOURCES
     src/core/application.cpp
     src/world/maze.cpp
     src/world/item_spawner.cpp
@@ -84,13 +84,13 @@ set(BACKROOMS_GAME_SOURCES
 # Developer tooling: the ImGui panel, the seed table and the console logger.
 # Kept as its own list because a release build drops it wholesale - the panel
 # is currently gated only at runtime by --dev, so the code still ships.
-set(BACKROOMS_DEV_SOURCES
+set(BACKLANDS_DEV_SOURCES
     src/dev/debug_overlay.cpp
 )
 
 # ImGui and rlImGui are compiled straight into each target - neither ships a
 # CMake target of its own.
-set(BACKROOMS_VENDOR_SOURCES
+set(BACKLANDS_VENDOR_SOURCES
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_demo.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
@@ -99,29 +99,29 @@ set(BACKROOMS_VENDOR_SOURCES
     ${rlimhui_SOURCE_DIR}/rlImGui.cpp
 )
 
-set(BACKROOMS_INCLUDE_DIRS
+set(BACKLANDS_INCLUDE_DIRS
     src
     ${imgui_SOURCE_DIR}
     ${rlimhui_SOURCE_DIR}
 )
 
 # 4. Define our executable
-add_executable(Backrooms
+add_executable(Backlands
     src/core/main.cpp
-    ${BACKROOMS_GAME_SOURCES}
-    ${BACKROOMS_DEV_SOURCES}
-    ${BACKROOMS_VENDOR_SOURCES}
+    ${BACKLANDS_GAME_SOURCES}
+    ${BACKLANDS_DEV_SOURCES}
+    ${BACKLANDS_VENDOR_SOURCES}
 )
 
 # Tell the compiler where to find the header files (.h files)
-target_include_directories(Backrooms PRIVATE ${BACKROOMS_INCLUDE_DIRS})
+target_include_directories(Backlands PRIVATE ${BACKLANDS_INCLUDE_DIRS})
 
 # Link Raylib to our executable
-target_link_libraries(Backrooms PRIVATE raylib)
+target_link_libraries(Backlands PRIVATE raylib)
 
 # Raylib recently renamed IsTextureReady to IsTextureValid. rlImGui expects the new name.
 # This define maps it back to the old name so it compiles with Raylib 5.0.
-target_compile_definitions(Backrooms PRIVATE IsTextureValid=IsTextureReady)
+target_compile_definitions(Backlands PRIVATE IsTextureValid=IsTextureReady)
 
 # ==============================================================================
 # 5. TESTING SUITE (Google Test)
@@ -139,29 +139,29 @@ enable_testing()
 
 # Create a brand new, completely separate executable just for running tests.
 # Notice we do NOT include main.cpp here, because gtest_main provides its own main()!
-add_executable(BackroomsTests
+add_executable(BacklandsTests
     tests/test_maze.cpp
     tests/test_magic_book.cpp
     tests/test_inventory.cpp
     tests/test_harness.cpp
     tests/test_overworld.cpp
-    ${BACKROOMS_GAME_SOURCES}
-    ${BACKROOMS_DEV_SOURCES}
-    ${BACKROOMS_VENDOR_SOURCES}
+    ${BACKLANDS_GAME_SOURCES}
+    ${BACKLANDS_DEV_SOURCES}
+    ${BACKLANDS_VENDOR_SOURCES}
 )
 
 # Tell the test executable where to find our source header files
-target_include_directories(BackroomsTests PRIVATE ${BACKROOMS_INCLUDE_DIRS})
+target_include_directories(BacklandsTests PRIVATE ${BACKLANDS_INCLUDE_DIRS})
 
 # Link Google Test and Raylib to the test executable
-target_link_libraries(BackroomsTests PRIVATE
+target_link_libraries(BacklandsTests PRIVATE
     gtest_main
     raylib
 )
 
 # Raylib recently renamed IsTextureReady to IsTextureValid. rlImGui expects the new name.
-target_compile_definitions(BackroomsTests PRIVATE IsTextureValid=IsTextureReady)
+target_compile_definitions(BacklandsTests PRIVATE IsTextureValid=IsTextureReady)
 
 # Register the executable with CTest so VS Code can magically discover it
 include(GoogleTest)
-gtest_discover_tests(BackroomsTests)
+gtest_discover_tests(BacklandsTests)

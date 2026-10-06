@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Project Backrooms is a 2D top-down psychological horror maze game with a custom C++20 engine on Raylib 5.0 + Dear ImGui (via rlImGui). Single-player, no networking, no scripting layer — everything is C++ compiled into one executable.
+Project Backlands is a 2D top-down psychological horror maze game with a custom C++20 engine on Raylib 5.0 + Dear ImGui (via rlImGui). Single-player, no networking, no scripting layer — everything is C++ compiled into one executable.
 
 Design intent lives in `docs/`: [roadmap.md](docs/roadmap.md) is the authoritative phased plan (Phases 0–3 built the maze; Phase 4 — overworld island generation — is built and awaiting a hand-play) and [the_wilderness_update.md](docs/the_wilderness_update.md) is the design reference for the two-world game (overworld survival hub + maze). The roadmap says what gets built when; the wilderness doc says why. Read both before adding a gameplay system — most features are already specced there.
 
@@ -37,44 +37,44 @@ cmake --preset mingw-release && cmake --build --preset mingw-release
 ```
 
 ```bash
-cd build-agent && ./Backrooms.exe
+cd build-agent && ./Backlands.exe
 ```
 
 Run the game — **must run with `build/` as the working directory**, because assets are loaded via relative paths like `assets/magic_trip.fs`:
 
 ```bash
-cd build && ./Backrooms.exe
+cd build && ./Backlands.exe
 ```
 
 Tests (Google Test, registered with CTest via `gtest_discover_tests`):
 
 ```bash
-./build/BackroomsTests.exe
+./build/BacklandsTests.exe
 ```
 
 A single test or suite:
 
 ```bash
-./build/BackroomsTests.exe --gtest_filter=MazeTest.ToroidalWrapping
+./build/BacklandsTests.exe --gtest_filter=MazeTest.ToroidalWrapping
 ```
 
 Headless run — scripted input, hidden window, no frame pacing; writes screenshots and telemetry per checkpoint (see "Headless harness" below):
 
 ```bash
-cd build && ./Backrooms.exe --headless ../scenarios/pickup.txt
+cd build && ./Backlands.exe --headless ../scenarios/pickup.txt
 ```
 
 Artifacts land in `artifacts/<scenario>/<checkpoint>/` (gitignored). `--out <dir>` overrides, `--ticks N` caps the run.
 
 ### Build gotchas
 
-- **From Git Bash the executables need MinGW on `PATH`.** Both `.exe`s link `libstdc++-6.dll` and `libgcc_s_seh-1.dll` dynamically. PowerShell finds them; Git Bash does not, and the process dies with exit code 127 and no output. Prefix with `PATH="/c/ProgramData/mingw64/mingw64/bin:$PATH"` or run from PowerShell. The same applies to **building** the test target from Git Bash: `gtest_discover_tests` runs the freshly linked exe to list tests, and without MinGW on `PATH` that step fails and make deletes `BackroomsTests.exe`.
+- **From Git Bash the executables need MinGW on `PATH`.** Both `.exe`s link `libstdc++-6.dll` and `libgcc_s_seh-1.dll` dynamically. PowerShell finds them; Git Bash does not, and the process dies with exit code 127 and no output. Prefix with `PATH="/c/ProgramData/mingw64/mingw64/bin:$PATH"` or run from PowerShell. The same applies to **building** the test target from Git Bash: `gtest_discover_tests` runs the freshly linked exe to list tests, and without MinGW on `PATH` that step fails and make deletes `BacklandsTests.exe`.
 - **Generator corruption (the most common breakage).** `CMakePresets.json` pins the generator, but a bare `cmake -S . -B build` (or any tool that ignores presets) still bypasses it. When such a reconfigure runs with the VS-bundled cmake, it rewrites the top-level `build/CMakeCache.txt` to `Visual Studio <N>` while every FetchContent sub-build under `build/_deps/*-subbuild/` keeps its `MinGW Makefiles` cache. A generator is immutable once written to a cache, so the nested raylib configure aborts with *"Does not match the generator used previously"*, the whole configure dies before emitting any `.vcxproj`, and the next build fails with `MSBUILD : error MSB1009: Project file does not exist. Switch: ALL_BUILD.vcxproj`. Recover by deleting **only** the top-level cache and re-running `cmake --preset mingw-debug`:
   ```bash
   rm -rf "build/CMakeCache.txt" "build/CMakeFiles"
   ```
   Leave `build/_deps/` in place — its sub-build caches are already MinGW and its downloaded sources (~150 MB of raylib/ImGui/rlImGui/googletest) are reused, so nothing re-downloads.
-- **Game sources are listed once, in the `BACKROOMS_GAME_SOURCES` variable**, and shared by both `add_executable` calls (`Backrooms` adds `main.cpp`, `BackroomsTests` adds the `tests/*.cpp`). Adding a new `.cpp` is one edit to that variable. Header-only additions need no edit at all — which is why `debug_log.hpp` and `asset_load.hpp` are headers.
+- **Game sources are listed once, in the `BACKLANDS_GAME_SOURCES` variable**, and shared by both `add_executable` calls (`Backlands` adds `main.cpp`, `BacklandsTests` adds the `tests/*.cpp`). Adding a new `.cpp` is one edit to that variable. Header-only additions need no edit at all — which is why `debug_log.hpp` and `asset_load.hpp` are headers.
 - **Assets are copied at configure time** (`file(COPY assets DESTINATION ${CMAKE_CURRENT_BINARY_DIR})`), not at build time. After editing or adding anything in `assets/`, re-run the cmake configure step — a plain `cmake --build` will not refresh `build/assets/`.
 - `target_compile_definitions(... IsTextureValid=IsTextureReady)` exists because rlImGui's `main` branch expects a Raylib API name newer than the pinned 5.0. Do not remove it while raylib stays at 5.0.
 - rlImGui is fetched from `main` and ImGui from the `docking` branch head — neither is pinned, so an upstream change can break the build without any local edit.
@@ -192,11 +192,11 @@ Its one write path into the game is `handleInventoryInput(Player&, World&)` (plu
 
 `DebugOverlay` (`src/dev/debug_overlay.hpp`) is the development panel, split out of `UIManager` and owned by `Application` so it survives future state switches. It is a *view*: presentation values the game needs regardless (torch on/off, camera zoom, the three light-cone numbers, show-zones) live in `RenderSettings`, which `MazeState` owns and the overlay edits by reference; only debug-only state (the god-view minimap texture, magic-book and trip forcing, status strings) belongs to the overlay. It uses the same mailbox convention — `MazeState` reads and clears `triggerTicTacToeRegen`, `triggerMagicBookSpawn`, `triggerForceTrip`, `triggerEndTrip`. Debug buttons must call the same public entry points the real systems will use, so they keep exercising the shipping path.
 
-Gating is runtime only: `Backrooms.exe --dev` arms the panel (`src/dev/dev_mode.hpp`) and `F1` shows/hides it. The code still ships inside the binary — a release build should drop `BACKROOMS_DEV_SOURCES` from the executable and guard the `dev/` includes, which is why the dev tooling is its own directory and its own CMake list.
+Gating is runtime only: `Backlands.exe --dev` arms the panel (`src/dev/dev_mode.hpp`) and `F1` shows/hides it. The code still ships inside the binary — a release build should drop `BACKLANDS_DEV_SOURCES` from the executable and guard the `dev/` includes, which is why the dev tooling is its own directory and its own CMake list.
 
 ### Headless harness
 
-`Backrooms.exe --headless <scenario>` replaces the keyboard with a text file and the screen with a directory. The game side is two small things in `core/capture.hpp`, and everything else lives in `dev/`:
+`Backlands.exe --headless <scenario>` replaces the keyboard with a text file and the screen with a directory. The game side is two small things in `core/capture.hpp`, and everything else lives in `dev/`:
 
 - **`Telemetry`** is a POD a state fills on request — `GameState::snapshot(Telemetry&)`, the mirror image of `InputState`: a value out, no JSON and no file I/O in `states/`. `MazeState::snapshot` reports player cell/facing/area, the camera's world rect, the bag, the items the canvas would draw (same `isCellRenderable` rule as `ItemRenderer`), and the maze counts.
 - **`CaptureSink`** is four hooks per tick. `Application::run` brackets the tick with `beginTick` / `endTick(tick, telemetry)`; `MazeState::render` calls `onSceneReady(m_screenTarget)` **immediately after `EndTextureMode`** and `onFrameReady()` **immediately before `EndDrawing`**. Those two positions are the whole point: the canvas is complete only there, and the back buffer is undefined after the swap — so the frame capture cannot be done from `Application`.

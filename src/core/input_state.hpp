@@ -16,7 +16,7 @@
 //   pressed - true only on the tick the key went down (everything else)
 //
 // Same shape as RenderSettings: a POD, owned by one place, passed by
-// const reference. Header-only so BACKROOMS_GAME_SOURCES needs no edit.
+// const reference. Header-only so BACKLANDS_GAME_SOURCES needs no edit.
 // ============================================================================
 struct InputState {
   static constexpr int kHotbarKeys = 5; // KEY_ONE .. KEY_FIVE

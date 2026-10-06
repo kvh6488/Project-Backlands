@@ -9,9 +9,9 @@
 // makes "the world where X happens" a reusable test fixture.
 //
 // Usage:
-//   Backrooms.exe                       -> random seed from the clock
-//   Backrooms.exe --seed radiation      -> a named fixture below
-//   Backrooms.exe --seed 1788480606     -> an explicit numeric seed
+//   Backlands.exe                       -> random seed from the clock
+//   Backlands.exe --seed radiation      -> a named fixture below
+//   Backlands.exe --seed 1788480606     -> an explicit numeric seed
 //
 // Header-only so no CMakeLists.txt source-list edits are needed.
 // ============================================================================

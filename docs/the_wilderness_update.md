@@ -1,6 +1,6 @@
 # The Wilderness — Overworld / Underworld Integration Design
 
-> **Living document** — the design for merging the wilderness survival game into Project Backrooms as a single, coherent title. Last updated: **05-10-2026**.
+> **Living document** — the design for merging the wilderness survival game into Project Backlands as a single, coherent title. Last updated: **05-10-2026**.
 >
 > This is the **design reference**: why the game is shaped the way it is. The **plan** — what gets built and in what order — is [roadmap.md](roadmap.md), which has absorbed this document's changes (§17).
 

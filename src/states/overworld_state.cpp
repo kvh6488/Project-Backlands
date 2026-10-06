@@ -38,7 +38,7 @@ void OverworldState::regenerate(unsigned int seed) {
   placePlayer();
   debuglog::log("ISLAND", "regenerated: seed %u, spawn (%d, %d)", seed,
                 m_world.spawnX(), m_world.spawnY());
-  debuglog::log("SEED", "reproduce with:  Backrooms.exe --seed %u --world overworld",
+  debuglog::log("SEED", "reproduce with:  Backlands.exe --seed %u --world overworld",
                 seed);
 }
 

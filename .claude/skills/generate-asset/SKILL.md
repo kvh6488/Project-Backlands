@@ -1,6 +1,6 @@
 ---
 name: generate-asset
-description: Source a sprite for Project Backrooms - search the local asset packs first, and only on a genuine miss generate one with PixelLab at 16px on the master palette. Use when a feature needs art that is not yet in assets/.
+description: Source a sprite for Project Backlands - search the local asset packs first, and only on a genuine miss generate one with PixelLab at 16px on the master palette. Use when a feature needs art that is not yet in assets/.
 ---
 
 # /generate-asset <sprite description>

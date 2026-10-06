@@ -199,7 +199,7 @@ void DebugOverlay::drawWorldSection(Maze &maze) {
 
   ImGui::Spacing();
   char cmd[96];
-  snprintf(cmd, sizeof(cmd), "Backrooms.exe --dev --seed %u", m_seed);
+  snprintf(cmd, sizeof(cmd), "Backlands.exe --dev --seed %u", m_seed);
   ImGui::TextDisabled("Reproduce this world:");
   ImGui::TextWrapped("%s", cmd);
   if (wideButton("Copy launch command")) {
@@ -420,7 +420,7 @@ void DebugOverlay::drawIslandSection(Player &player, Overworld &world) {
 
   ImGui::Spacing();
   char cmd[96];
-  snprintf(cmd, sizeof(cmd), "Backrooms.exe --dev --world overworld --seed %u",
+  snprintf(cmd, sizeof(cmd), "Backlands.exe --dev --world overworld --seed %u",
            m_seed);
   ImGui::TextDisabled("Reproduce this island:");
   ImGui::TextWrapped("%s", cmd);

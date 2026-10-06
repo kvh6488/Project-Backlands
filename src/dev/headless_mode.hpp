@@ -3,7 +3,7 @@
 // ============================================================================
 // Headless Mode — command line for a scripted, windowless run
 // ============================================================================
-//   Backrooms.exe --headless <scenario.txt> [--out <dir>] [--ticks N]
+//   Backlands.exe --headless <scenario.txt> [--out <dir>] [--ticks N]
 //
 // The window is created hidden, frame pacing is off, ImGui is skipped, and
 // the keyboard is replaced by the scenario (dev/scenario.hpp). At each

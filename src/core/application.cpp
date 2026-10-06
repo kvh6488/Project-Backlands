@@ -24,7 +24,7 @@ Application::Application(const AppConfig &config)
   SetTraceLogLevel(LOG_WARNING);
   debuglog::log("SEED", "%u  (%s)", m_run.seed,
                 config.seedNote ? config.seedNote : "unspecified");
-  debuglog::log("SEED", "reproduce with:  Backrooms.exe --seed %u", m_run.seed);
+  debuglog::log("SEED", "reproduce with:  Backlands.exe --seed %u", m_run.seed);
   if (m_debugOverlay.isVisible()) {
     debuglog::log("DEV", "debug tools armed  (F1 toggles the panel)");
   }
@@ -38,7 +38,7 @@ Application::Application(const AppConfig &config)
   // SetTargetFPS so ticks run back-to-back; the fixed dt keeps the simulation
   // seeing 1/60 s per tick regardless.
   SetConfigFlags(FLAG_WINDOW_RESIZABLE | (m_headless ? FLAG_WINDOW_HIDDEN : 0));
-  InitWindow(config.windowW, config.windowH, "Project Backrooms");
+  InitWindow(config.windowW, config.windowH, "Project Backlands");
   SetWindowMinSize(config.windowW, config.windowH);
   if (!m_headless) {
     SetTargetFPS(60);
@@ -49,10 +49,11 @@ Application::Application(const AppConfig &config)
   SetRandomSeed(m_run.seed);
 
   // 1.5 Set Window Icon
+  // The player's sprite facing left: column 0, row 2 (FacingDirection::LEFT).
   Image iconImage =
-      assets::loadImage("assets/guard_yellow_spritesheet.png", "Application");
+      assets::loadImage("assets/inspector_spritesheet.png", "Application");
   if (IsImageReady(iconImage)) {
-    ImageCrop(&iconImage, grid::srcTile(0, 0));
+    ImageCrop(&iconImage, grid::srcTile(0, 2));
     SetWindowIcon(iconImage);
     UnloadImage(iconImage);
   }
