@@ -25,7 +25,7 @@ inline constexpr Color bad = pal::accent[3];         // missing ingredients, unc
 inline constexpr Color mapWall = pal::neutral[3];
 inline constexpr Color mapZone = pal::accent[3];        // shifting-zone cells on the map
 inline constexpr Color mapPlayer = pal::accent[4];      // lavender dot, ringed in ground
-inline constexpr Color radiationGlow = pal::accent[5];  // barrel halos, additive
+inline constexpr Color radiationGlow = pal::green[6];   // barrel halos, additive; true green (accent lime reads yellow)
 
 // Overworld biome fills: the debug island map paints these (the surface
 // itself draws its tile sheets).

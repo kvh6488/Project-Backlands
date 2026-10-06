@@ -88,7 +88,7 @@ void ItemRenderer::drawQueued(int x, int y) const {
     int cy = (int)(cell.y + cell.height / 2.0f);
 
     BeginBlendMode(BLEND_ADDITIVE);
-    DrawCircleGradient(cx, cy, grid::CELL * 1.1f, Fade(theme::radiationGlow, 45 / 255.0f),
+    DrawCircleGradient(cx, cy, grid::CELL * 1.1f, Fade(theme::radiationGlow, 100 / 255.0f),
                        Fade(theme::radiationGlow, 0.0f));
     EndBlendMode();
 
@@ -96,7 +96,7 @@ void ItemRenderer::drawQueued(int x, int y) const {
                    {0, 0}, 0.0f, WHITE);
 
     BeginBlendMode(BLEND_ADDITIVE);
-    DrawCircleGradient(cx, cy, grid::CELL * 0.45f, Fade(theme::radiationGlow, 55 / 255.0f),
+    DrawCircleGradient(cx, cy, grid::CELL * 0.45f, Fade(theme::radiationGlow, 125 / 255.0f),
                        Fade(theme::radiationGlow, 0.0f));
     EndBlendMode();
     break;
