@@ -74,9 +74,12 @@ inline float forestMoisture(float temperature) {
   return temperature < 0.35f ? 0.45f : 0.58f;
 }
 
+// Moisture at which land turns to wetland, at any temperature.
+inline constexpr float kWetlandMoisture = 0.8f;
+
 inline Biome whittaker(float temperature, float moisture) {
   int t = temperature < 0.35f ? 0 : temperature < 0.6f ? 1 : 2;
-  int m = moisture < 0.45f ? 0 : moisture < 0.58f ? 1 : moisture < 0.8f ? 2 : 3;
+  int m = moisture < 0.45f ? 0 : moisture < 0.58f ? 1 : moisture < kWetlandMoisture ? 2 : 3;
   return kWhittaker[t][m];
 }
 

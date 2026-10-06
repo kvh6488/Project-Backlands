@@ -20,7 +20,8 @@
 //           ruler-straight)
 //   swamp   a lake or river the IslandMap marked as swamp water
 //   land    Biome rules (biome.hpp), with moisture raised near water and
-//           raised further, over a wider halo, near swamp water; beach only
+//           raised further, over a wider halo, near swamp water
+//           (island::landMoisture); beach only
 //           within a wobbling reach of the ocean
 //   shade   how far moisture is past the forest line (grassland and forest),
 //           or a drift field (snow), cut into steps - so the ground can
@@ -77,8 +78,6 @@ public:
   // Distances in coarse cells, from cell centres.
   static constexpr float kOceanReach = 1.5f; // below sea level counts as sea
   static constexpr float kBeachReach = 1.5f; // +-0.5 by noise: ~4-12 tiles of sand
-  static constexpr float kSwampWet = 0.55f;    // moisture added at swamp water
-  static constexpr float kSwampSpread = 4.0f;  // e-folding distance (~32 tiles)
   // Moisture past the forest line where the shade steps (jittered per tile).
   static constexpr float kMeadowMargin = -0.04f;    // grassland 0 -> 1
   static constexpr float kDeepForestMargin = 0.05f; // forest 2 -> 3

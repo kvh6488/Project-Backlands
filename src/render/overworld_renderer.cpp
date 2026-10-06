@@ -155,8 +155,8 @@ constexpr Pick kForestDecals[] = {{DECAL_PATCH_A, 3},      {DECAL_PATCH_B, 3},
                                   {DECAL_FERN, 3},         {DECAL_MUSHROOM_RED, 1},
                                   {DECAL_MUSHROOM_BROWN, 2}, {DECAL_MUSHROOMS, 1},
                                   {DECAL_PEBBLE_MOSS, 1}};
-constexpr Pick kWetlandDecals[] = {{DECAL_PATCH_A, 2}, {DECAL_PATCH_C, 2}, {DECAL_FERN, 2},
-                                   {DECAL_MUSHROOM_BROWN, 1}, {DECAL_PEBBLE_MOSS, 1}};
+constexpr Pick kWetlandDecals[] = {{DECAL_PATCH_A, 3}, {DECAL_PATCH_C, 3}, {DECAL_FERN, 3},
+                                   {DECAL_MUSHROOMS, 1}, {DECAL_PEBBLE_MOSS, 1}};
 constexpr Pick kMountainDecals[] = {{DECAL_PEBBLE_GREY, 3}, {DECAL_PEBBLES_GREY, 3},
                                     {DECAL_PEBBLE_BROWN, 2}, {DECAL_DEAD_TUFT_B, 1}};
 constexpr Pick kSnowDecals[] = {{DECAL_PEBBLE_SNOW, 3}, {DECAL_PEBBLES_SNOW, 2},
@@ -176,7 +176,7 @@ DecalOdds decalOdds(Biome b, uint8_t shade) {
   switch (b) {
   case Biome::GRASSLAND: return shade ? DecalOdds{0.10f, kMeadowDecals} : DecalOdds{0.10f, kGrassDecals};
   case Biome::FOREST: return {0.14f, kForestDecals};
-  case Biome::WETLAND: return {0.08f, kWetlandDecals};
+  case Biome::WETLAND: return {0.07f, kWetlandDecals};
   case Biome::MOUNTAIN: return {0.10f, kMountainDecals};
   case Biome::SNOW: return {0.08f, kSnowDecals};
   case Biome::BEACH: return {0.04f, kBeachDecals};
@@ -202,9 +202,9 @@ owsprite::Id pickFrom(std::span<const Pick> pool, uint32_t r) {
 
 constexpr uint32_t kDecalSalt = 0x68e31da4u;
 
-// Roots in water lap through four stages, each this long; a tree starts at a
-// stage of its own so the shore does not pulse in step.
-constexpr float kLapSecondsFlowing = 0.25f, kLapSecondsStill = 0.5f;
+// Roots in a river lap through four stages, each this long; a tree starts at
+// a stage of its own so the bank does not pulse in step.
+constexpr float kLapSeconds = 0.6f;
 constexpr uint32_t kLapSalt = 0x3c6ef372u;
 
 constexpr float kCoverAlpha = 0.45f;
@@ -517,12 +517,13 @@ void OverworldRenderer::drawFade(int fade, int x0, int y0, int w, int h) const {
 // Ground details sit flat on the terrain, so they draw here rather than in
 // the DrawQueue. A detail wider than its tile needs row neighbours of its own
 // biome - a tuft would otherwise hang over a shore or a biome edge - and none
-// goes under a prop. Stones in water keep near a shore.
+// goes under a prop. Stones in water keep near a shore, but off the bank.
 void OverworldRenderer::drawDecals(int x0, int y0, int w, int h) const {
   const uint32_t seed = m_world->island().seed();
-  auto nearLand = [&](int x, int y) {
-    for (int dy = -2; dy <= 2; ++dy)
-      for (int dx = -2; dx <= 2; ++dx)
+  // Land within `r` tiles; r <= 3 stays inside the cell cache.
+  auto landWithin = [&](int x, int y, int r) {
+    for (int dy = -r; dy <= r; ++dy)
+      for (int dx = -r; dx <= r; ++dx)
         if (!isWater(cellAt(x + dx, y + dy).biome))
           return true;
     return false;
@@ -537,7 +538,7 @@ void OverworldRenderer::drawDecals(int x0, int y0, int w, int h) const {
       if (owsprite::kFrames[id].w > 1 &&
           (cellAt(x - 1, y).biome != c.biome || cellAt(x + 1, y).biome != c.biome))
         continue;
-      if (isWater(c.biome) && !nearLand(x, y))
+      if (isWater(c.biome) && (landWithin(x, y, 1) || !landWithin(x, y, 3)))
         continue;
       const owsprite::Frame &f = owsprite::kFrames[id];
       Rectangle src = grid::srcTile(f.col, f.row, f.w, f.h);
@@ -639,24 +640,21 @@ void OverworldRenderer::drawQueued(int x, int y) const {
                 CheckCollisionPointRec(m_focus, dest);
   const Color tint = covers ? Fade(WHITE, kCoverAlpha) : WHITE;
 
-  // Roots wider than the tile spill onto the cells beside it. Over water,
+  // The widest roots spill onto the cells beside their tile. Over a river,
   // that slice of the bottom row laps: dry, foam, sunk, foam (stage 0-3).
-  // Frames are centred on the tile, so a slice boundary can fall mid-column;
-  // slices are cut at world cell edges, in canvas px.
+  // Still water stays still. Frames are centred on the tile, so a slice
+  // boundary can fall mid-column; slices are cut at world cell edges, in
+  // canvas px.
   const float bottomY = dest.y + dest.height - grid::CELL;
   const int cx0 = (int)std::floor(dest.x / grid::CELL);
   const int cx1 = (int)std::ceil((dest.x + dest.width) / grid::CELL) - 1;
-  bool wet = false, flowing = false;
-  for (int cx = cx0; cx <= cx1; ++cx) {
-    if (cx != x && isWater(m_world->biomeAt(cx, y))) {
-      wet = true;
-      flowing = flowing || m_world->flowAt(cx, y) != 0;
-    }
-  }
+  auto laps = [&](int cx) { return cx != x && m_world->flowAt(cx, y) != 0; };
+  bool wet = false;
+  for (int cx = cx0; cx <= cx1 && f.wetRow >= 0 && !wet; ++cx)
+    wet = laps(cx);
   const int phase = (int)(noise::hash(m_world->wrapX(x), m_world->wrapY(y),
                                       m_world->island().seed() ^ kLapSalt) % 4);
-  const int stage =
-      ((int)(m_time / (flowing ? kLapSecondsFlowing : kLapSecondsStill)) + phase) % 4;
+  const int stage = ((int)(m_time / kLapSeconds) + phase) % 4;
   if (!wet || stage == 0) {
     DrawTexturePro(m_props, src, dest, {0, 0}, 0.0f, tint);
     return;
@@ -670,7 +668,7 @@ void OverworldRenderer::drawQueued(int x, int y) const {
     const float right = std::min(dest.x + dest.width, (float)(cx + 1) * grid::CELL);
     if (right <= left)
       continue;
-    const bool sunk = cx != x && isWater(m_world->biomeAt(cx, y));
+    const bool sunk = laps(cx);
     const float sx = (left - dest.x) / grid::WORLD_SCALE;
     const int wetRow = f.wetRow + (stage == 2 ? 1 : 0);
     Rectangle piece = {src.x + sx,

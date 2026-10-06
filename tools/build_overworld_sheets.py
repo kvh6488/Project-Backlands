@@ -249,6 +249,9 @@ PROPS = (
 PROP_RECOLOUR = {f"PC1_S{s}_GREEN": {"#91ca51": "#69a754", "#69a754": "#55834c"} for s in (2, 3, 4, 5)}
 ATLAS_TILES = 40  # atlas width in tiles
 WATERLINE = 11    # art-px row of a prop's bottom tile the lapping water reaches
+# Props whose roots spread far enough over a river to lap (the widest, at
+# 30-32 px across; the next widest are 23). The rest draw dry over water.
+LAPPING = {"WILLOW"} | {f"PC1_S5_{c}" for c in ("GREEN", "TAN", "BARE", "FROZEN", "ORANGE", "AMBER")}
 
 
 def snow_cap(rock):
@@ -711,11 +714,14 @@ def props_atlas(src):
     # Foam: the water risen to WATERLINE - a light line where the roots cut
     # it, one px wider each side, and half the root showing below.
     half = (yy <= WATERLINE) | (BAYER4[yy % 4, xx % 4] < 8)
-    foam_rgb = hexrgb("#91d6e8")
+    foam_rgb = hexrgb("#6ea7c6")  # the water's own ripple colour
     frames = []
     for i in range(len(sprites)):
         c, r, fw, fh = place[i]
         k = shelf_tops.index(r)
+        if sprites[i][0] not in LAPPING:
+            frames.append((c, r, fw, fh, -1))
+            continue
         bottom = sprites[i][1][(fh - 1) * T:fh * T]
         foam = bottom.copy()
         foam[~np.tile(half, (1, fw))] = 0
@@ -742,7 +748,7 @@ def write_header(frames, path):
            "namespace owsprite {", "",
            "// wetRow: the row of ow_props_wet.png holding the frame's bottom row",
            "// with a foam line at the waterline; wetRow + 1 holds it sunk. Same",
-           "// columns as the frame.",
+           "// columns as the frame. -1: the prop's roots do not lap.",
            "struct Frame {", "  int col, row, w, h, wetRow;", "};", "",
            "enum Id : int {"]
     out += [f"  {n}," for n in names]

@@ -107,12 +107,9 @@ TileSample Island::sample(int x, int y) const {
   }
 
   out.temperature = m_field.temperature(px, py, out.height);
-  // Up to +0.35 at the water's edge, fading over ~3 coarse cells (24 tiles),
-  // and a wider, wetter halo round swamp water that grows the wetland.
-  out.moisture = m_field.moistureNoise(px, py) +
-                 0.35f * std::exp(-distAt(m_map.waterDist, px, py) / 3.0f) +
-                 kSwampWet * std::exp(-distAt(m_map.swampDist, px, py) /
-                                      kSwampSpread);
+  out.moisture = island::landMoisture(m_field.moistureNoise(px, py),
+                                      distAt(m_map.waterDist, px, py),
+                                      distAt(m_map.swampDist, px, py));
   // Beach width wobbles along the coast, measured from ocean cell centres.
   // Two octaves: the bilinear field alone leaves straight runs inside a cell.
   float beachReach =

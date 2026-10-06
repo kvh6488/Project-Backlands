@@ -36,8 +36,9 @@
 // several tiles. Land fades are clipped to the grass's corner shapes at the
 // shore and take their own outline colour there.
 //
-// ROOTS IN WATER: where a prop's root row spills onto a water tile, that
-// slice laps through dry, foam line, sunk, foam line - faster on a river.
+// ROOTS IN WATER: where one of the widest-rooted props (willow, the big
+// oak) spills onto a river tile, that slice laps through dry, foam line,
+// sunk, foam line. On still water roots draw as they are.
 //
 // RIVERS FLOW: river water is one repeating texture sampled at the tile's
 // world position, shifted downstream by time along the tile's flow step. The

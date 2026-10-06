@@ -162,6 +162,35 @@ TEST(IslandTest, SwampWaterIsASwampLakeAndTheRiversBesideIt) {
   }
 }
 
+TEST(IslandTest, NoOpenLakeSitsInAMarsh) {
+  // Wetland is swamp country: a lake whose banks are mostly wetland is a
+  // swamp. Check every open lake's banks, tile by tile.
+  const Island &isl = sharedWorld().island();
+  const IslandMap &m = isl.map();
+  const int k = IslandConfig::kCoarse;
+  std::vector<int> bank(m.lakeSwamp.size(), 0), wet(m.lakeSwamp.size(), 0);
+  for (int c = 0; c < m.n * m.n; ++c) {
+    const int id = m.lake[c];
+    if (id < 0 || m.lakeSwamp[id])
+      continue;
+    for (int y = (c / m.n) * k; y < (c / m.n + 1) * k; y += 2)
+      for (int x = (c % m.n) * k; x < (c % m.n + 1) * k; x += 2) {
+        if (isl.sample(x, y).biome != Biome::LAKE)
+          continue;
+        for (auto [dx, dy] : {std::pair{3, 0}, {-3, 0}, {0, 3}, {0, -3}}) {
+          Biome b = isl.sample(x + dx, y + dy).biome;
+          if (isWater(b))
+            continue;
+          bank[id]++;
+          wet[id] += b == Biome::WETLAND;
+        }
+      }
+  }
+  for (size_t id = 0; id < bank.size(); ++id)
+    if (bank[id] >= 20)
+      EXPECT_LE(2 * wet[id], bank[id]) << "lake " << id;
+}
+
 TEST(IslandTest, OnlyRiversFlowAndTheyFlowDownstream) {
   const Island &isl = sharedWorld().island();
   const IslandMap &m = isl.map();

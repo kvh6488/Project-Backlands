@@ -1,6 +1,9 @@
 #pragma once
 
+#include "world/biome.hpp"
 #include "world/terrain_field.hpp"
+#include <algorithm>
+#include <cmath>
 #include <vector>
 
 // ============================================================================
@@ -83,9 +86,11 @@ struct IslandMap {
 //               from the lake's outlet, because the lake's whole inflow
 //               leaves through it.                                     O(N)
 //   8. Swamps   About 1 in 3 of the low, warm lakes (at least one per
-//               island) become swamps, and so does every river cell within
-//               kSwampRiverReach steps of one along the flow, up- or
-//               downstream.                                     O(N * reach)
+//               island) become swamps. So does any lake most of whose shore
+//               lies in a swamp's wet halo, repeated until none joins - so
+//               swamps come as regions, and no open lake sits in a marsh. Then
+//               every river cell within kSwampRiverReach steps of a swamp
+//               lake along the flow, up- or downstream.  O(N * passes + reach)
 //   9. Distance Euclidean distance to the nearest water (moisture bonus),
 //               ocean (beach width) and swamp water (the wetland around a
 //               swamp), by nearest-source propagation.             ~O(N)
@@ -102,4 +107,17 @@ inline constexpr float kPitDepth = 0.002f;  // fill below this is a flat, not a 
 inline constexpr float kSwampMinTemperature = 0.55f; // warm lowland lakes only
 inline constexpr float kSwampChance = 0.35f;
 inline constexpr int kSwampRiverReach = 6; // coarse cells (~48 tiles)
+
+// Land moisture: the field's noise, raised near water and raised further,
+// over a wider halo, near swamp water. Distances in coarse cells. Island::sample
+// and the swamp choice both use it, so they agree on where the wetland is.
+// Ordinary water alone stops just short of wetland: wetland is swamp country
+// (or a below-sea marsh), so a plain lake gets grass or forest banks.
+inline constexpr float kWaterWet = 0.35f, kWaterSpread = 3.0f; // ~24 tiles
+inline constexpr float kSwampWet = 0.55f, kSwampSpread = 4.0f; // ~32 tiles
+inline float landMoisture(float noise, float waterDist, float swampDist) {
+  const float plain = noise + kWaterWet * std::exp(-waterDist / kWaterSpread);
+  return std::min(plain, biome::kWetlandMoisture - 0.01f) +
+         kSwampWet * std::exp(-swampDist / kSwampSpread);
+}
 } // namespace island

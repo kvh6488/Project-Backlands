@@ -271,29 +271,78 @@ void chooseSwamps(IslandMap &m, const TerrainField &field, uint32_t seed) {
     m.lakeSwamp[fallback] = 1;
 
   auto inSwampLake = [&](int c) { return m.lake[c] >= 0 && m.lakeSwamp[m.lake[c]]; };
-  for (int c = 0; c < N; ++c) {
-    // Upstream: a river cell that reaches a swamp lake within the reach.
-    if (m.river[c]) {
-      int r = c;
-      for (int step = 0; step < island::kSwampRiverReach && r >= 0; ++step) {
-        r = m.receiver[r];
-        if (r >= 0 && inSwampLake(r)) {
-          m.swampRiver[c] = 1;
-          break;
+  auto markSwampRivers = [&] {
+    std::fill(m.swampRiver.begin(), m.swampRiver.end(), 0);
+    for (int c = 0; c < N; ++c) {
+      // Upstream: a river cell that reaches a swamp lake within the reach.
+      if (m.river[c]) {
+        int r = c;
+        for (int step = 0; step < island::kSwampRiverReach && r >= 0; ++step) {
+          r = m.receiver[r];
+          if (r >= 0 && inSwampLake(r)) {
+            m.swampRiver[c] = 1;
+            break;
+          }
+          if (r < 0 || !m.river[r])
+            break;
         }
-        if (r < 0 || !m.river[r])
-          break;
+      }
+      // Downstream: the run of river leaving a swamp lake's outlet.
+      if (inSwampLake(c) && m.receiver[c] >= 0 && m.lake[m.receiver[c]] != m.lake[c]) {
+        int r = m.receiver[c];
+        for (int step = 0; step < island::kSwampRiverReach && r >= 0 && m.river[r];
+             ++step) {
+          m.swampRiver[r] = 1;
+          r = m.receiver[r];
+        }
       }
     }
-    // Downstream: the run of river leaving a swamp lake's outlet.
-    if (inSwampLake(c) && m.receiver[c] >= 0 && m.lake[m.receiver[c]] != m.lake[c]) {
-      int r = m.receiver[c];
-      for (int step = 0; step < island::kSwampRiverReach && r >= 0 && m.river[r];
-           ++step) {
-        m.swampRiver[r] = 1;
-        r = m.receiver[r];
+  };
+
+  // A lake most of whose shore cells would be wetland is a swamp too:
+  // read at the water's edge (the wettest, lowest part of the bank), with
+  // the halo of every swamp lake and swamp river so far. Each new swamp
+  // widens that halo, which can tip another lake, so repeat until none
+  // joins. Every pass but the last adds a lake, so this ends.
+  for (;;) {
+    markSwampRivers();
+    const std::vector<float> toSwamp =
+        distanceFrom(m, [&](int c) { return m.swampRiver[c] || inSwampLake(c); });
+    std::vector<int> shore(lakes, 0), wet(lakes, 0);
+    for (int c = 0; c < N; ++c) {
+      if (m.lake[c] >= 0 || m.ocean[c])
+        continue;
+      const int x = c % m.n, y = c / m.n;
+      int seen[8], count = 0; // the open lakes beside this cell, once each
+      for (int d = 0; d < 8; ++d) {
+        const int id = m.lake[m.index(x + kDX[d], y + kDY[d])];
+        if (id >= 0 && !m.lakeSwamp[id] && std::find(seen, seen + count, id) == seen + count)
+          seen[count++] = id;
+      }
+      if (count == 0)
+        continue;
+      // At the water's edge: the bank's height is the lake's level there.
+      const float tx = (x + 0.5f) * k, ty = (y + 0.5f) * k;
+      const float moisture =
+          island::landMoisture(field.moistureNoise(tx, ty), 0.0f, toSwamp[c]);
+      for (int i = 0; i < count; ++i) {
+        const float h = m.lakeLevel[seen[i]];
+        const bool wetland =
+            m.height[c] < 0.0f || biome::classifyLand(h, field.temperature(tx, ty, h), moisture,
+                                                      false) == Biome::WETLAND;
+        shore[seen[i]]++;
+        wet[seen[i]] += wetland;
       }
     }
+    bool joined = false;
+    for (int id = 0; id < lakes; ++id) {
+      if (!m.lakeSwamp[id] && shore[id] > 0 && 2 * wet[id] > shore[id]) {
+        m.lakeSwamp[id] = 1;
+        joined = true;
+      }
+    }
+    if (!joined)
+      break;
   }
 }
 
