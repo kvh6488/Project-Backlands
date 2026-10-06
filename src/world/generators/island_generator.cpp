@@ -150,14 +150,23 @@ void traceRivers(IslandMap &m, uint32_t seed) {
 
   std::vector<std::vector<int>> perCell(N);
   for (int c = 0; c < N; ++c) {
-    if (!m.river[c])
+    // A lake's outlet cell gets a reach too, from its centre (always under
+    // water) to the river it drains into; else the river starts at its own
+    // node, short of wherever the shoreline happens to stop.
+    const bool outlet = m.lake[c] >= 0 && m.receiver[c] >= 0 && m.river[m.receiver[c]];
+    if (!m.river[c] && !outlet)
       continue;
     int r = m.receiver[c];
     if (m.lake[r] >= 0)
       m.lakeInflow[m.lake[r]]++;
 
     IslandMap::Segment s;
-    riverNode(m, c, seed, s.ax, s.ay);
+    if (outlet) {
+      s.ax = (c % m.n + 0.5f) * k;
+      s.ay = (c / m.n + 0.5f) * k;
+    } else {
+      riverNode(m, c, seed, s.ax, s.ay);
+    }
     // The receiver is a neighbour; place it relative to c rather than by its
     // own index so a reach never jumps the wrap seam.
     int dx = r % m.n - c % m.n, dy = r / m.n - c / m.n;
@@ -176,7 +185,7 @@ void traceRivers(IslandMap &m, uint32_t seed) {
     }
     s.halfWidth = std::min(
         3.4f, 0.9f + 0.55f * std::log2(m.flow[c] / island::kRiverFlow + 1.0f));
-    s.cell = c;
+    s.cell = outlet ? r : c; // an outlet is still or running as its river is
     int id = (int)m.segments.size();
     m.segments.push_back(s);
     perCell[c].push_back(id);

@@ -68,11 +68,6 @@ TileSample Island::sample(int x, int y) const {
       }
     }
   }
-  if (out.height < 0.0f) {
-    out.biome = Biome::WETLAND;
-    return out;
-  }
-
   // Coordinates here are unwrapped tile space, which is what the reaches
   // are stored in; rivers never come near the seam. Where reaches overlap (a
   // confluence, a bend) the nearest one decides, so the flow direction
@@ -103,6 +98,13 @@ TileSample Island::sample(int x, int y) const {
     float a = std::atan2(reach->by - reach->ay, reach->bx - reach->ax);
     int octant = (int)std::lround(a / (std::numbers::pi_v<float> / 4.0f));
     out.flow = (uint8_t)(((octant % 8) + 8) % 8 + 1);
+    return out;
+  }
+
+  // After the rivers, so a river crossing a dip below sea level runs on
+  // through it rather than breaking into marsh.
+  if (out.height < 0.0f) {
+    out.biome = Biome::WETLAND;
     return out;
   }
 

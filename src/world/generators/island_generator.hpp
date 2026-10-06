@@ -39,7 +39,8 @@ struct IslandMap {
   std::vector<uint8_t> lakeSwamp; // the lake is a swamp
 
   // A river reach: a straight run from one cell's node to its receiver's, in
-  // tile coordinates. Indexed per coarse cell in CSR form (segStart/segIds),
+  // tile coordinates. A lake's outlet cell has one too, from its centre, so
+  // the river leaving a lake starts in the lake's water. Indexed per coarse cell in CSR form (segStart/segIds),
   // under BOTH endpoint cells, so a tile only searches its 3x3 neighbourhood.
   struct Segment {
     float ax, ay, bx, by;
@@ -84,7 +85,9 @@ struct IslandMap {
 //               cell, a lake or the ocean: every river ends in water, and
 //               where two meet they merge. A river into a lake continues
 //               from the lake's outlet, because the lake's whole inflow
-//               leaves through it.                                     O(N)
+//               leaves through it - and both ends are joined by a reach
+//               running to (or from) the lake cell's centre, which is
+//               always under water.                                    O(N)
 //   8. Swamps   About 1 in 3 of the low, warm lakes 15-25 % of the way
 //               inland (at least one per island) become swamps. So does any
 //               lake in that band most of whose shore

@@ -14,10 +14,11 @@
 //           bilinear distance field, so the edge is not 8x8 blocky)
 //   lake    below the spill level of a lake in the 3x3 neighbourhood - the
 //           fine height decides the shoreline, so it is not 8x8 blocky
-//   marsh   below sea level but neither: a hollow too small to be a lake,
-//           which reads as wetland
 //   river   within a reach's half-width (wobbled by noise, so banks are not
 //           ruler-straight)
+//   marsh   below sea level but none of those: a hollow too small to be a
+//           lake, which reads as wetland. Checked after rivers, so a river
+//           runs on through a dip rather than breaking
 //   swamp   a lake or river the IslandMap marked as swamp water
 //   land    Biome rules (biome.hpp), with moisture raised near water and
 //           raised further, over a wider halo, near swamp water

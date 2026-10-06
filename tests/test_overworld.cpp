@@ -126,6 +126,26 @@ TEST(IslandTest, EveryRiverEndsInALakeOrTheOcean) {
   EXPECT_GT(rivers, 50) << "the island should have a river network";
 }
 
+TEST(IslandTest, EveryReachIsWaterEndToEnd) {
+  // Every reach - including a lake's outlet - is water along its whole
+  // centre line once tidied, so rivers meet lakes, the sea and each other
+  // with no strip of land between.
+  const Overworld &w = sharedWorld();
+  int outlets = 0;
+  for (const IslandMap::Segment &s : w.island().map().segments) {
+    outlets += w.island().map().lake[w.island().map().index(
+                   (int)s.ax / IslandConfig::kCoarse, (int)s.ay / IslandConfig::kCoarse)] >= 0;
+    const int steps = (int)(std::hypot(s.bx - s.ax, s.by - s.ay) * 4) + 1;
+    for (int i = 0; i <= steps; ++i) {
+      const float t = (float)i / steps;
+      const int x = (int)std::floor(s.ax + t * (s.bx - s.ax));
+      const int y = (int)std::floor(s.ay + t * (s.by - s.ay));
+      ASSERT_TRUE(isWater(w.biomeAt(x, y))) << x << "," << y;
+    }
+  }
+  EXPECT_GT(outlets, 20) << "lake outlets should have reaches";
+}
+
 TEST(IslandTest, LoneLakesAndFedLakesBothExist) {
   const IslandMap &m = sharedWorld().island().map();
   int lone = 0, fed = 0;
