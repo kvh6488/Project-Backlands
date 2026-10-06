@@ -126,7 +126,7 @@ IslandMap buildIslandMap(const TerrainField &field, const IslandConfig &cfg,
 namespace island {
 inline constexpr int kMinLakeCells = 3;
 inline constexpr float kRiverFlow = 160.0f; // ~10k tiles of catchment
-inline constexpr float kPitDepth = 0.002f;  // fill below this is a flat, not a pit
+inline constexpr float kPitDepth = 0.009f;  // fill below this is a flat, not a pit
 inline constexpr float kSwampMinTemperature = 0.55f; // warm lowland lakes only
 inline constexpr float kSwampChance = 0.35f;
 // Swamps only form between these shares of the way inland (0 the coast,

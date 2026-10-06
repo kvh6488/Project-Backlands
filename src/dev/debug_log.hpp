@@ -5,7 +5,7 @@
 // ============================================================================
 // Raylib writes its own diagnostics as "[INFO] ...", which is impossible to
 // scan past when our messages use the same tag. This header prints a bold
-// magenta "[BR]" tag plus a fixed-width category column, so our output forms
+// magenta "[BL]" tag plus a fixed-width category column, so our output forms
 // a vertical stripe down the terminal that the eye locks onto immediately.
 //
 // Header-only on purpose: adding a .cpp would mean editing BOTH executable
@@ -35,7 +35,7 @@ __declspec(dllimport) int __stdcall SetConsoleMode(void *hConsoleHandle,
 namespace debuglog {
 
 // ANSI SGR codes. Bold + bright magenta for the tag, reset afterwards.
-inline constexpr const char *TAG = "\x1b[1;95m[BR]\x1b[0m";
+inline constexpr const char *TAG = "\x1b[1;95m[BL]\x1b[0m";
 inline constexpr const char *CAT = "\x1b[1;96m"; // bright cyan category
 inline constexpr const char *RESET = "\x1b[0m";
 
@@ -68,13 +68,13 @@ inline void enableAnsiColors() {
 #endif
 }
 
-// Prints "[BR] CATEGORY | message". Category is padded to 7 columns so the
+// Prints "[BL] CATEGORY | message". Category is padded to 7 columns so the
 // pipe separators line up across every message.
 inline void log(const char *category, const char *fmt, ...) {
   if (ansiEnabled()) {
     std::printf("%s %s%-7s%s | ", TAG, CAT, category, RESET);
   } else {
-    std::printf("[BR] %-7s | ", category);
+    std::printf("[BL] %-7s | ", category);
   }
   va_list args;
   va_start(args, fmt);

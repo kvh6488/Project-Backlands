@@ -263,7 +263,7 @@ TEST(OverworldTest, ShoreTidyIsExactInsideItsApron) {
   // A chunk is tidied with a kPasses-tile apron; its core must match the
   // whole grid tidied at once, or chunks would disagree at their borders.
   const Island &isl = sharedWorld().island();
-  constexpr int A = shoreline::kPasses, W = 120, x0 = 2440, y0 = 1000;
+  constexpr int A = shoreline::kPasses, W = 120, x0 = 2480, y0 = 1600;
   std::vector<TileSample> whole(W * W);
   for (int y = 0; y < W; ++y)
     for (int x = 0; x < W; ++x)
