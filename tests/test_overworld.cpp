@@ -404,6 +404,25 @@ TEST(OverworldRendererTest, FullOrangeAutumnTreesAreHeldBack) {
       }
 }
 
+TEST(OverworldRendererTest, GroundDetailsAreFlatDecalsAtAModestDensity) {
+  for (int b = 0; b < (int)Biome::COUNT; ++b) {
+    for (uint8_t shade = 0; shade < 4; ++shade) {
+      int shown = 0;
+      for (uint32_t h = 0; h < 4000; ++h) {
+        owsprite::Id id = OverworldRenderer::decalFor((Biome)b, shade, noise::hash(h, b, 9));
+        if (id == owsprite::COUNT)
+          continue;
+        ++shown;
+        // Flat: one tile tall, so drawing under the props is never wrong.
+        EXPECT_EQ(owsprite::kFrames[id].h, 1);
+        EXPECT_GE(id, owsprite::DECAL_FLOWERS_A); // decals only, no props
+      }
+      EXPECT_LT(shown, 4000 / 5) << biomeId((Biome)b); // at most ~20% of tiles
+    }
+  }
+  EXPECT_EQ(OverworldRenderer::decalFor(Biome::OCEAN, 0, 0), owsprite::COUNT);
+}
+
 TEST(OverworldRendererTest, SpriteFramesDoNotOverlapInTheAtlas) {
   using owsprite::kFrames;
   for (int i = 0; i < owsprite::COUNT; ++i) {

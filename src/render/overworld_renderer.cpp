@@ -157,6 +157,61 @@ std::span<const Pick> poolFor(PropType type, Biome b) {
   }
 }
 
+// Ground details: flat, walk-over, picked per tile from a hash like the
+// species, and drawn with the terrain. (chance per tile, pool)
+constexpr Pick kGrassDecals[] = {{DECAL_FLOWERS_A, 2}, {DECAL_FLOWERS_B, 2}, {DECAL_FLOWER, 3},
+                                 {DECAL_STARS_A, 2},   {DECAL_STARS_B, 2},   {DECAL_TUFT_A, 3},
+                                 {DECAL_TUFT_B, 3},    {DECAL_PEBBLE_GREY, 1}};
+constexpr Pick kMeadowDecals[] = {{DECAL_TUFT_A, 3},  {DECAL_TUFT_B, 3},   {DECAL_FLOWER, 2},
+                                  {DECAL_PATCH_A, 2}, {DECAL_PATCH_B, 2}, {DECAL_STARS_A, 1}};
+constexpr Pick kForestDecals[] = {{DECAL_PATCH_A, 3},      {DECAL_PATCH_B, 3},
+                                  {DECAL_PATCH_C, 2},      {DECAL_TWIGS, 3},
+                                  {DECAL_FERN, 3},         {DECAL_MUSHROOM_RED, 1},
+                                  {DECAL_MUSHROOM_BROWN, 2}, {DECAL_MUSHROOMS, 1},
+                                  {DECAL_PEBBLE_MOSS, 1}};
+constexpr Pick kWetlandDecals[] = {{DECAL_PATCH_A, 2}, {DECAL_PATCH_C, 2}, {DECAL_FERN, 2},
+                                   {DECAL_MUSHROOM_BROWN, 1}, {DECAL_PEBBLE_MOSS, 1}};
+constexpr Pick kMountainDecals[] = {{DECAL_PEBBLE_GREY, 3}, {DECAL_PEBBLES_GREY, 3},
+                                    {DECAL_PEBBLE_BROWN, 2}, {DECAL_DEAD_TUFT_B, 1}};
+constexpr Pick kSnowDecals[] = {{DECAL_DEAD_TUFT_A, 3}, {DECAL_DEAD_TUFT_B, 3}, {DECAL_ICE_A, 2},
+                                {DECAL_ICE_B, 2},       {DECAL_PEBBLE_GREY, 1}};
+constexpr Pick kBeachDecals[] = {{DECAL_SHELL, 3}, {DECAL_SHELL_PINK, 2}, {DECAL_PEBBLE_GREY, 1}};
+constexpr Pick kFreshWaterDecals[] = {{DECAL_STONE_WATER_A, 2}, {DECAL_STONE_WATER_B, 2},
+                                      {DECAL_STONE_WATER_C, 2}, {DECAL_STONE_WATER_MOSS, 1}};
+
+struct DecalOdds {
+  float chance;
+  std::span<const Pick> pool;
+};
+
+DecalOdds decalOdds(Biome b, uint8_t shade) {
+  switch (b) {
+  case Biome::GRASSLAND: return shade ? DecalOdds{0.10f, kMeadowDecals} : DecalOdds{0.10f, kGrassDecals};
+  case Biome::FOREST: return {0.14f, kForestDecals};
+  case Biome::WETLAND: return {0.08f, kWetlandDecals};
+  case Biome::MOUNTAIN: return {0.10f, kMountainDecals};
+  case Biome::SNOW: return {0.08f, kSnowDecals};
+  case Biome::BEACH: return {0.04f, kBeachDecals};
+  case Biome::LAKE: case Biome::RIVER: return {0.015f, kFreshWaterDecals};
+  default: return {0.0f, {}};
+  }
+}
+
+owsprite::Id pickFrom(std::span<const Pick> pool, uint32_t r) {
+  int total = 0;
+  for (const Pick &p : pool)
+    total += p.weight;
+  int k = (int)(r % (uint32_t)total);
+  for (const Pick &p : pool) {
+    if (k < p.weight)
+      return p.id;
+    k -= p.weight;
+  }
+  return pool.back().id;
+}
+
+constexpr uint32_t kDecalSalt = 0x68e31da4u;
+
 constexpr float kCoverAlpha = 0.45f;
 
 constexpr int widestFrame() {
@@ -206,18 +261,15 @@ Color OverworldRenderer::biomeColour(Biome b) {
 owsprite::Id OverworldRenderer::spriteFor(PropType type, Biome biome,
                                           uint8_t variant) {
   std::span<const Pick> pool = poolFor(type, biome);
-  if (pool.empty())
+  return pool.empty() ? owsprite::COUNT : pickFrom(pool, variant);
+}
+
+owsprite::Id OverworldRenderer::decalFor(Biome biome, uint8_t shade, uint32_t hash) {
+  DecalOdds odds = decalOdds(biome, shade);
+  // Low 16 bits roll the chance, the rest pick from the pool.
+  if (odds.pool.empty() || (hash & 0xffffu) >= (uint32_t)(odds.chance * 65536.0f))
     return owsprite::COUNT;
-  int total = 0;
-  for (const Pick &p : pool)
-    total += p.weight;
-  int r = variant % total;
-  for (const Pick &p : pool) {
-    if (r < p.weight)
-      return p.id;
-    r -= p.weight;
-  }
-  return pool.back().id;
+  return pickFrom(odds.pool, hash >> 16);
 }
 
 void OverworldRenderer::renderTerrain(const Overworld &world,
@@ -251,6 +303,31 @@ void OverworldRenderer::renderTerrain(const Overworld &world,
   m_world = &world;
   for (int layer = 0; layer < LAYER_COUNT; ++layer)
     drawLayer(layer, x0, y0, w, h, frame);
+  drawDecals(x0, y0, w, h);
+}
+
+// Ground details sit flat on the terrain, so they draw here rather than in
+// the DrawQueue. Only on a tile whose row neighbours share its biome - a tuft
+// two tiles wide would otherwise hang over a shore or a biome edge - and
+// never under a prop.
+void OverworldRenderer::drawDecals(int x0, int y0, int w, int h) const {
+  const uint32_t seed = m_world->island().seed();
+  for (int j = 1; j <= h; ++j) {
+    for (int i = 1; i <= w; ++i) {
+      const Cell &c = m_cells[j * m_cellsW + i];
+      if (m_cells[j * m_cellsW + i - 1].biome != c.biome ||
+          m_cells[j * m_cellsW + i + 1].biome != c.biome)
+        continue;
+      const int x = x0 - 1 + i, y = y0 - 1 + j;
+      owsprite::Id id = decalFor(c.biome, c.shade,
+                                 noise::hash(m_world->wrapX(x), m_world->wrapY(y), seed ^ kDecalSalt));
+      if (id == owsprite::COUNT || m_world->propAt(x, y) != PropType::NONE)
+        continue;
+      const owsprite::Frame &f = owsprite::kFrames[id];
+      Rectangle src = grid::srcTile(f.col, f.row, f.w, f.h);
+      DrawTexturePro(m_props, src, grid::standingOn(src, x, y), {0, 0}, 0.0f, WHITE);
+    }
+  }
 }
 
 void OverworldRenderer::drawLayer(int layer, int x0, int y0, int w, int h,

@@ -34,6 +34,9 @@
 // corners. Inland layers use generated sets with all 16 (see
 // tools/build_overworld_sheets.py).
 //
+// GROUND DETAILS (flowers, tufts, pebbles, ice) are render-only: a tile's
+// hash picks one from a per-biome pool, drawn flat with the terrain.
+//
 // PROPS: the world says what grows on a tile (TREE, PINE, ...) and a hash
 // byte; this renderer decides which picture. A per-(kind, biome) weighted
 // pool turns the byte into a sprite, so a TREE is a willow in the wetland and
@@ -63,6 +66,9 @@ public:
 
   // The sprite a prop draws as. Pure: same prop, same sprite.
   static owsprite::Id spriteFor(PropType type, Biome biome, uint8_t variant);
+  // The ground detail (a DECAL_* sprite) on a tile with this biome, shade
+  // and hash, or COUNT for none. Pure, like spriteFor.
+  static owsprite::Id decalFor(Biome biome, uint8_t shade, uint32_t hash);
 
   // Props are rooted on their base tile and grow up, so a tall tree rooted
   // below the screen can still reach into view: collect() scans this many
@@ -88,6 +94,7 @@ public:
 
 private:
   void drawLayer(int layer, int x0, int y0, int w, int h, int frame) const;
+  void drawDecals(int x0, int y0, int w, int h) const;
 
   Texture2D m_water{}, m_coast{}, m_terrain{}, m_shades{}, m_props{}, m_propsWet{};
   const Overworld *m_world = nullptr;

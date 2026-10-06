@@ -89,6 +89,8 @@ SOURCES = {
     "lb_rock":  (LB + "/Environment/Deco/rocks.png", None),
     "pc_rock":  (PC + "/Props/Static/Rocks.png", (0, 16, 208, 304)),  # drops the "PALETTE:" label
     "reeds":    (SW + "/objects&items/swamp water objects.png", None),
+    "lb_flora": (LB + "/Environment/Vegetation/grass, flowers & mushrooms.png", None),
+    "lb_wet":   (LB + "/Environment/Deco/deco on water.png", None),
 }
 for _m in (1, 2, 3):
     for _s in (2, 3, 4, 5):
@@ -195,8 +197,65 @@ PROPS = (
     + boxes("pc_rock", [("BOULDER_BROWN", (2, 3, 28, 43)), ("BOULDER_BROWN_LOW", (35, 3, 26, 27)),
                         ("BOULDER_GREY", (98, 3, 28, 43)), ("BOULDER_GREY_LOW", (131, 3, 26, 27))])
     + boxes("reeds", [("CATTAIL_TALL", (48, 16, 16, 32)), ("CATTAIL_SHORT", (64, 16, 16, 32)), ("SWAMP_PLANT", (80, 48, 16, 32))])
+    # Ground details (DECAL_*): flat, walk-over, drawn with the terrain.
+    + boxes("lb_flora", [("DECAL_FLOWERS_A", (65, 1, 13, 12)), ("DECAL_FLOWERS_B", (81, 1, 10, 13)),
+                         ("DECAL_FLOWER", (49, 2, 8, 8)), ("DECAL_STARS_A", (68, 17, 15, 14)),
+                         ("DECAL_STARS_B", (96, 17, 16, 14)), ("DECAL_TUFT_A", (14, 64, 20, 15)),
+                         ("DECAL_TUFT_B", (15, 49, 18, 14)), ("DECAL_PATCH_A", (48, 17, 15, 13)),
+                         ("DECAL_PATCH_B", (33, 20, 13, 10)), ("DECAL_PATCH_C", (2, 17, 14, 9)),
+                         ("DECAL_TWIGS", (96, 65, 16, 15)), ("DECAL_FERN", (127, 64, 18, 16)),
+                         ("DECAL_MUSHROOM_RED", (99, 81, 10, 13)), ("DECAL_MUSHROOM_BROWN", (99, 97, 10, 13)),
+                         ("DECAL_MUSHROOMS", (128, 113, 16, 14))])
+    + boxes("lb_rock", [("DECAL_PEBBLE_GREY", (3, 7, 10, 8)), ("DECAL_PEBBLES_GREY", (17, 4, 14, 11)),
+                        ("DECAL_PEBBLE_MOSS", (3, 23, 10, 8)), ("DECAL_PEBBLE_BROWN", (3, 39, 10, 8))])
+    + boxes("lb_wet", [("DECAL_STONE_WATER_A", (1, 35, 15, 12)), ("DECAL_STONE_WATER_B", (17, 49, 15, 14)),
+                       ("DECAL_STONE_WATER_C", (2, 66, 13, 13)), ("DECAL_STONE_WATER_MOSS", (49, 35, 15, 12))])
+    + boxes("gen", [("DECAL_DEAD_TUFT_A", (0, 0, 20, 15)), ("DECAL_DEAD_TUFT_B", (24, 0, 19, 14)),
+                    ("DECAL_ICE_A", (48, 0, 14, 7)), ("DECAL_ICE_B", (64, 0, 10, 5)),
+                    ("DECAL_SHELL", (80, 0, 6, 5)), ("DECAL_SHELL_PINK", (88, 0, 5, 4))])
 )
 ATLAS_TILES = 40  # atlas width in tiles
+
+
+def generated_decals(src):
+    """Decals no pack draws: dead grass poking through snow (LightBorne's
+    tufts, each green moved to the straw tan of the same lightness), ice
+    patches, and two beach shells."""
+    g = np.zeros((16, 96, 4), np.uint8)
+    straw = [hexrgb(h) for h in ("#544527", "#74653c", "#96894e", "#b4ac6a")]
+    straw_L = srgb_to_oklab(np.array(straw, np.uint8))[:, 0]
+    for (x0, y0, w, h), dx in (((14, 64, 20, 15), 0), ((15, 80, 19, 14), 24)):
+        tuft = src["lb_flora"][y0:y0 + h, x0:x0 + w].copy()
+        op = tuft[..., 3] > 0
+        L = srgb_to_oklab(tuft[op][:, :3])[:, 0]
+        # Spread the tuft's lightness over the four straws, darkest to lightest.
+        rank = np.clip(((L - L.min()) / max(1e-6, L.max() - L.min()) * 4).astype(int), 0, 3)
+        tuft[op, :3] = np.array(straw, np.uint8)[rank]
+        g[0:h, dx:dx + w] = tuft
+    ice, rim, glint = hexrgb("#b4c4e4"), hexrgb("#a6b7c6"), hexrgb("#dfe3ed")
+    for x0, w, h in ((48, 14, 7), (64, 10, 5)):
+        yy, xx = np.mgrid[0:h, 0:w]
+        inside = ((xx - (w - 1) / 2) / (w / 2)) ** 2 + ((yy - (h - 1) / 2) / (h / 2)) ** 2 <= 1.0
+        patch = np.zeros((h, w, 4), np.uint8)
+        patch[inside] = (*ice, 255)
+        patch[inside & (yy == h - 1)] = (*rim, 255)
+        patch[1, w // 3:w // 3 + 3] = (*glint, 255)
+        g[0:h, x0:x0 + w] = patch
+    shell, shade, pink = hexrgb("#f6e998"), hexrgb("#cc9770"), hexrgb("#f4a568")
+    sh = np.zeros((5, 6, 4), np.uint8)
+    for y, row in enumerate(("..##..", ".#..#.", "######", "#.##.#", ".####.")):
+        for x, c in enumerate(row):
+            if c == "#":
+                sh[y, x] = (*(shade if y >= 3 and x in (0, 5) else shell), 255)
+    sh[1, 2:4] = (*shade, 255)
+    g[0:5, 80:86] = sh
+    pk = np.zeros((4, 5, 4), np.uint8)
+    for y, row in enumerate((".###.", "#####", "#.#.#", ".###.")):
+        for x, c in enumerate(row):
+            if c == "#":
+                pk[y, x] = (*(pink if y < 2 else shade), 255)
+    g[0:4, 88:93] = pk
+    return g
 
 
 def match(a, rgb):
@@ -574,6 +633,7 @@ def main():
     a = ap.parse_args()
     pal = load_palette(a.palette)
     src = load_sources(a.packs, pal)
+    src["gen"] = generated_decals(src)
     if a.dump:
         os.makedirs(a.dump, exist_ok=True)
         for name, px in src.items():
