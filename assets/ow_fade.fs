@@ -4,13 +4,12 @@
 // ow_fade - one fade material (swamp water, wetland, gravel, snow, drift)
 // drawn pixel by pixel over the view. OverworldRenderer::drawFade.
 //
-// SWAMP WATER (layer 0) is not a weighted fade. It is drawn in passes, one
-// per tint `level` (1 faint .. 4 full murk), each over the last. A pass
-// covers the cells whose swamp step is at least `level`: at each dual-grid
-// corner it reads which water cells fall short of that and keeps the pixels
-// that corner's mask keeps (the sheet's first row, dithered in along
-// LightBorne's shape) - the shade overlays' fade, done here because the
-// swamp texture sways and so cannot be baked into tiles.
+// SWAMP WATER (layer 0) is drawn in passes, one per tint `level` (1 faint ..
+// 4 full murk), each over the last. Its weight is the swamp depth, read
+// bilinear and nudged by broad noise so the bands wander; pass k covers the
+// k-th quarter of it, under the same clumpy threshold as the land fades.
+// Every pass shares that threshold, so a darker tint never draws where a
+// fainter one did not.
 // ============================================================================
 // COVERAGE. `weights` / `info` hold, per cell, the share of nearby cells that
 // are this material. Sampled bilinear, that is a smooth 0..1 ramp across a
@@ -33,7 +32,7 @@ in vec4 fragColor;
 
 uniform sampler2D texture0; // assets/ow_fades.png
 uniform sampler2D weights;  // per cell: wetland, gravel, snow, drift
-uniform sampler2D info;     // per cell: r = land (grass) flag, g = swamp step / 4
+uniform sampler2D info;     // per cell: r = land (grass) flag, g = swamp depth 0..1
 uniform sampler2D swampWater; // assets/ow_swamp_water.png: a tiling square per level
 uniform int level;          // swamp water's tint pass, 1..4
 uniform ivec2 sway;         // the still water's offset now, art px
@@ -72,14 +71,14 @@ bool isLand(ivec2 cell) {
   return texelFetch(info, cell - cellOrigin, 0).r > 0.5;
 }
 
-// Water short of this pass's level sets its bit; `swamp` notes a cell at
-// or past it.
-int openBit(ivec2 cell, int bit, inout bool swamp) {
-  vec4 i = texelFetch(info, cell - cellOrigin, 0);
-  int step = int(i.g * 4.0 + 0.5);
-  bool land = i.r > 0.5;
-  swamp = swamp || (!land && step >= level);
-  return !land && step < level ? bit : 0;
+// The threshold a coverage must beat: clumpy value noise (blobs a few art px
+// across) with a little Bayer to break the blobs' smooth outlines into pixels.
+float clumpyThreshold(ivec2 px, uint salt) {
+  vec2 centre = vec2(px) + 0.5;
+  float blob = 0.7 * valueNoise(centre / 3.0, salt ^ 0xb10bu) + 0.3 * valueNoise(centre / 1.5, salt ^ 0x5eedu);
+  blob = clamp((blob - 0.5) * 2.2 + 0.5, 0.0, 1.0);
+  float bayer = (float(kBayer[(px.y & 3) * 4 + (px.x & 3)]) + 0.5) / 16.0;
+  return clamp(0.8 * blob + 0.2 * bayer, 0.02, 0.98);
 }
 
 void main() {
@@ -87,13 +86,16 @@ void main() {
   vec2 art = fragTexCoord * vec2(textureSize(texture0, 0));
   ivec2 px = ivec2(floor(art));
 
+  vec2 uv = (art / float(T) - vec2(cellOrigin)) / vec2(textureSize(weights, 0));
   if (layer == 0) {
-    ivec2 v = ivec2(floor((art + vec2(T / 2)) / float(T)));
-    ivec2 local = px + ivec2(T / 2) - v * T;
-    bool swamp = false;
-    int open = openBit(v + ivec2(-1, -1), 8, swamp) | openBit(v + ivec2(0, -1), 4, swamp) |
-               openBit(v + ivec2(-1, 0), 2, swamp) | openBit(v, 1, swamp);
-    if (!swamp || texelFetch(texture0, ivec2(open * T + local.x, local.y), 0).a < 0.5)
+    float d = texture(info, uv).g;
+    // Broad wander (a few tiles across) plus finer ragging; none where the
+    // water is fully open or fully swamp, so neither gets specks.
+    float n = 0.22 * (2.0 * valueNoise(art / 40.0, 0x51a3u) - 1.0) +
+              0.08 * (2.0 * valueNoise(art / 9.0, 0x7e11u) - 1.0);
+    d = clamp(d + n * 4.0 * d * (1.0 - d), 0.0, 1.0);
+    float c = clamp(d * 4.0 - float(level - 1), 0.0, 1.0);
+    if (c <= clumpyThreshold(px, 0x5a3fu))
       discard;
     int side = textureSize(swampWater, 0).x; // the squares are stacked down the sheet
     ivec2 at = ivec2(mod(vec2(px + sway), float(side))); // GLSL % is undefined below 0
@@ -102,22 +104,14 @@ void main() {
   }
 
   // Coverage. Cell (i) of the data covers art px [i, i+1) * T, its texel
-  // centre at the cell's centre, so this lands bilinear between cell centres.
-  vec2 uv = (art / float(T) - vec2(cellOrigin)) / vec2(textureSize(weights, 0));
+  // centre at the cell's centre, so `uv` lands bilinear between cell centres.
   vec4 ws = texture(weights, uv);
   float w = layer == 1 ? ws.r : layer == 2 ? ws.g : layer == 3 ? ws.b : min(ws.a, ws.b);
   uint salt = uint(layer) * 0x9e3779b9u;
   float n = 0.18 * (2.0 * valueNoise(art / 7.0, salt) - 1.0) +
             0.06 * (2.0 * valueNoise(art / 2.5, salt ^ 0x51edu) - 1.0);
   float c = w + n * 4.0 * w * (1.0 - w);
-  // Threshold: clumpy value noise (blobs a few art px across) with a little
-  // Bayer mixed in to break the blobs' smooth outlines into pixels.
-  vec2 centre = vec2(px) + 0.5;
-  float blob = 0.7 * valueNoise(centre / 3.0, salt ^ 0xb10bu) + 0.3 * valueNoise(centre / 1.5, salt ^ 0x5eedu);
-  blob = clamp((blob - 0.5) * 2.2 + 0.5, 0.0, 1.0);
-  float bayer = (float(kBayer[(px.y & 3) * 4 + (px.x & 3)]) + 0.5) / 16.0;
-  float threshold = clamp(0.8 * blob + 0.2 * bayer, 0.02, 0.98);
-  if (c <= threshold)
+  if (c <= clumpyThreshold(px, salt))
     discard;
 
   // The dual-grid corner this pixel is drawn at, and where in its tile.

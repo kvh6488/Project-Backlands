@@ -326,29 +326,47 @@ void OverworldRenderer::shareWithin(const std::vector<uint8_t> &in,
   }
 }
 
-void OverworldRenderer::swampLevels(const std::vector<uint8_t> &water,
-                                    const std::vector<uint8_t> &swamp, int w, int h,
-                                    std::vector<uint8_t> &out) {
+void OverworldRenderer::swampDepth(const std::vector<uint8_t> &water,
+                                   const std::vector<uint8_t> &swamp, int w, int h,
+                                   std::vector<float> &out) {
   const int n = w * h;
-  out.assign(n, (uint8_t)kSwampSteps);
-  std::vector<int> queue;
+  std::vector<int> d(n, kSwampReach), queue;
   for (int k = 0; k < n; ++k)
     if (water[k] && !swamp[k]) {
-      out[k] = 0;
+      d[k] = 0;
       queue.push_back(k);
     }
   for (size_t head = 0; head < queue.size(); ++head) {
     const int k = queue[head], x = k % w, y = k / w;
-    if (out[k] + 1 >= kSwampSteps)
+    if (d[k] + 1 >= kSwampReach)
       continue;
     for (int dy = -1; dy <= 1; ++dy)
       for (int dx = -1; dx <= 1; ++dx) {
         const int nx = x + dx, ny = y + dy, nk = ny * w + nx;
-        if (nx < 0 || ny < 0 || nx >= w || ny >= h || !swamp[nk] || out[nk] <= out[k] + 1)
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h || !swamp[nk] || d[nk] <= d[k] + 1)
           continue;
-        out[nk] = (uint8_t)(out[k] + 1);
+        d[nk] = d[k] + 1;
         queue.push_back(nk);
       }
+  }
+  out.assign(n, 0.0f);
+  for (int k = 0; k < n; ++k)
+    if (water[k])
+      out[k] = (float)d[k];
+  for (int k = 0; k < n; ++k) {
+    if (water[k])
+      continue;
+    float sum = 0.0f;
+    int count = 0;
+    for (int dy = -1; dy <= 1; ++dy)
+      for (int dx = -1; dx <= 1; ++dx) {
+        const int nx = k % w + dx, ny = k / w + dy;
+        if (nx >= 0 && ny >= 0 && nx < w && ny < h && water[ny * w + nx]) {
+          sum += out[ny * w + nx];
+          ++count;
+        }
+      }
+    out[k] = count > 0 ? sum / (float)count : 0.0f;
   }
 }
 
@@ -451,7 +469,8 @@ void OverworldRenderer::drawGlints(int x0, int y0, int w, int h) const {
 // beach each cache cell is, for the bank rows.
 void OverworldRenderer::buildFades(int x0, int y0, int w, int h) {
   const int n = m_cellsW * m_cellsH;
-  std::vector<uint8_t> land(n), water(n), all(n, 1), levels;
+  std::vector<uint8_t> land(n), water(n), all(n, 1);
+  std::vector<float> depth;
   std::vector<uint8_t> in[6]; // wetland, gravel, snow, drift, swamp, beach
   for (auto &v : in)
     v.resize(n);
@@ -469,7 +488,7 @@ void OverworldRenderer::buildFades(int x0, int y0, int w, int h) {
   std::vector<float> share[4], beach1, beach2;
   for (int f = 0; f < 4; ++f)
     shareWithin(in[f], land, m_cellsW, m_cellsH, kFadeRadius, share[f]);
-  swampLevels(water, in[4], m_cellsW, m_cellsH, levels);
+  swampDepth(water, in[4], m_cellsW, m_cellsH, depth);
   shareWithin(in[5], all, m_cellsW, m_cellsH, 1, beach1);
   shareWithin(in[5], all, m_cellsW, m_cellsH, 2, beach2);
   for (int k = 0; k < n; ++k)
@@ -489,10 +508,9 @@ void OverworldRenderer::buildFades(int x0, int y0, int w, int h) {
       const int k = (j + kCacheMargin - 1) * m_cellsW + (i + kCacheMargin - 1);
       Color &wpx = m_weightPx[j * tw + i];
       wpx = {byte(share[0][k]), byte(share[1][k]), byte(share[2][k]), byte(share[3][k])};
-      // g: the swamp step in quarters (texelFetch reads it back exactly).
+      // g: swamp depth, 0..1 over kSwampReach tiles, read bilinear.
       m_infoPx[j * tw + i] = {(unsigned char)(land[k] ? 255 : 0),
-                              (unsigned char)(water[k] ? levels[k] * 255 / kSwampSteps : 0),
-                              0, 255};
+                              byte(depth[k] / (float)kSwampReach), 0, 255};
       m_fadeUsed[FADE_SWAMP] |= in[4][k] != 0;
       m_fadeUsed[FADE_WETLAND] |= wpx.r > 0;
       m_fadeUsed[FADE_GRAVEL] |= wpx.g > 0;

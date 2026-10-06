@@ -580,26 +580,26 @@ TEST(OverworldRendererTest, FadeShareRampsAcrossABorder) {
   EXPECT_FLOAT_EQ(s[row + 5], 0.5f);
 }
 
-TEST(OverworldRendererTest, SwampStepsRiseAwayFromOpenWater) {
-  // 12 x 5, all water: open in columns 0-1, swamp from column 2 on.
-  constexpr int W = 12, H = 5;
+TEST(OverworldRendererTest, SwampDepthRisesAwayFromOpenWater) {
+  // 14 x 5, all water: open in columns 0-1, swamp from column 2 on.
+  constexpr int W = 14, H = 5, R = OverworldRenderer::kSwampReach;
   std::vector<uint8_t> water(W * H, 1), swamp(W * H);
   for (int k = 0; k < W * H; ++k)
     swamp[k] = k % W >= 2;
-  std::vector<uint8_t> lv;
-  OverworldRenderer::swampLevels(water, swamp, W, H, lv);
+  std::vector<float> d;
+  OverworldRenderer::swampDepth(water, swamp, W, H, d);
   const int row = 2 * W;
-  const int want[W] = {0, 0, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4};
   for (int x = 0; x < W; ++x)
-    EXPECT_EQ(lv[row + x], want[x]) << "column " << x;
+    EXPECT_FLOAT_EQ(d[row + x], (float)std::min(std::max(x - 1, 0), R)) << "column " << x;
 
   // A land column at 4 cuts the swamp beyond it off from the open water:
-  // steps are counted through water only.
+  // depth is counted through water only. The land takes its neighbours' mean.
   for (int y = 0; y < H; ++y)
     water[y * W + 4] = swamp[y * W + 4] = 0;
-  OverworldRenderer::swampLevels(water, swamp, W, H, lv);
-  EXPECT_EQ(lv[row + 3], 2);
-  EXPECT_EQ(lv[row + 5], OverworldRenderer::kSwampSteps);
+  OverworldRenderer::swampDepth(water, swamp, W, H, d);
+  EXPECT_FLOAT_EQ(d[row + 3], 2.0f);
+  EXPECT_FLOAT_EQ(d[row + 5], (float)R);
+  EXPECT_FLOAT_EQ(d[row + 4], (2.0f + R) / 2.0f);
 }
 
 TEST(OverworldRendererTest, SpriteFramesDoNotOverlapInTheAtlas) {

@@ -41,10 +41,8 @@ Outputs, all the renderer loads:
                   the material's two outline colours as pixels (x = 128,
                   129); a last row of LightBorne's 16 corner shapes coded
                   body / mid outline / dark outline, which the shader clips
-                  land materials to; and first, the swamp row: 16 masks of
-                  where swamp water draws on a corner, by which of its cells
-                  are open water - dithered in along LightBorne's shape like
-                  the shade overlays
+                  land materials to. Row 0 (swamp water) is empty: the shader
+                  draws it from ow_swamp_water.png
   ow_props.png    every tree, bush, rock and reed, repacked on the 16px grid
   ow_props_wet.png  each prop's bottom tile row twice more, for roots that
                   spill onto water: with a foam line at the waterline, and
@@ -623,7 +621,6 @@ def fades_sheet(src, pal):
     lb = src["lb_tiles"]
     lb_body = lb_body_colours(lb)
     a = np.zeros(((len(FADES) + 1) * T, 16 * T, 4), np.uint8)
-    a[0:T] = swamp_masks(lb)
     for k, name in enumerate(FADES):
         if name == "swamp":
             continue
@@ -648,26 +645,6 @@ def fades_sheet(src, pal):
                     code = MASK_DARK if L < 0.45 else MASK_MID
                 a[y0 + y, mask * T + x] = (*hexrgb(code), 255)
     return a
-
-
-def swamp_masks(lb):
-    """Where a swamp tint draws on a dual-grid corner, by `open` - the
-    corner's water cells below that tint (TL=8 TR=4 BL=2 BR=1). Land counts
-    with the swamp: the
-    bank covers it either way, and the swamp then reaches right to its shore.
-    Like a shade overlay, the swamp dithers out over SHADE_BAND px inward
-    from LightBorne's shape. Column 15 (all open water) stays clear."""
-    yy, xx = np.mgrid[0:T, 0:T]
-    row = np.zeros((T, 16 * T, 4), np.uint8)
-    for open_ in range(15):
-        if open_ == 0:
-            d = np.full((T, T), 99.0)
-        else:
-            c, r = LB_CORNERS[15 - open_]
-            d = dist_to(tile(lb, c, r)[..., 3] == 0)
-        keep = BAYER4[yy % 4, xx % 4] < np.clip(d / SHADE_BAND, 0, 1) * 16
-        row[:, open_ * T:(open_ + 1) * T][keep] = (*hexrgb(MASK_BODY), 255)
-    return row
 
 
 def recolour(a, mapping):
