@@ -92,8 +92,7 @@ import sys
 import numpy as np
 from PIL import Image
 
-from palette_sample import srgb_to_oklab
-from quantize import load_palette, quantize
+from quantize import load_palette, quantize, srgb_to_oklab
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 T = 16  # art px per tile

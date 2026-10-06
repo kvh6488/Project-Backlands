@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Generate src/core/palette.hpp from assets/palette.json.
+"""Generate everything derived from assets/palette.json: src/core/palette.hpp,
+assets/palette_strip.png and assets/palette_swatch.png.
 
 Usage:
     python tools/palette_header.py
@@ -11,15 +12,55 @@ Colors so C++ has no reason to spell a hex by hand. Ramps keep their JSON
 names and step order (0 = darkest); roles ("text", "alert") are not here -
 they are a hand decision and live in ui/ui_theme.hpp.
 
-Re-run after any change to assets/palette.json and commit the header. The
-test PaletteHeader.MatchesStrip fails if the two drift.
+The strip is one pixel per colour, ramp by ramp (import it into
+Aseprite/GIMP as a palette); the swatch is the labelled picture docs/palette.md
+shows. Re-run after any change to assets/palette.json and commit all three.
+The test PaletteHeader.MatchesStrip fails if header and strip drift.
 """
 import json
 import os
 
+from PIL import Image, ImageDraw, ImageFont
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "assets", "palette.json")
 DST = os.path.join(ROOT, "src", "core", "palette.hpp")
+STRIP = os.path.join(ROOT, "assets", "palette_strip.png")
+SWATCH = os.path.join(ROOT, "assets", "palette_swatch.png")
+
+
+def draw_swatch(ramps, path):
+    """Labelled ramps. Text uses palette colours, but the ground is
+    deliberately off-palette (a dull plum no ramp contains) so the darkest
+    neutral reads as a block against it. The labels are anti-aliased anyway,
+    so quantize.py --check skips this file by name; it is documentation, not
+    a sheet the game loads."""
+    cell, pad, label_w = 48, 8, 88
+    font = ImageFont.load_default()
+    by = {r["name"]: r["colours"] for r in ramps}
+    ink = tuple(by["neutral"][-1]["rgb"]); dim = tuple(by["neutral"][-3]["rgb"])
+    ground = (38, 26, 44)  # off-palette on purpose: see docstring
+    width = label_w + max(len(r["colours"]) for r in ramps) * (cell + pad) + pad
+    height = pad + len(ramps) * (cell + 22 + pad)
+    img = Image.new("RGB", (width, height), ground)
+    dr = ImageDraw.Draw(img)
+    y = pad
+    for r in ramps:
+        dr.text((pad, y + cell // 2 - 6), r["name"], fill=ink, font=font)
+        for i, c in enumerate(r["colours"]):
+            x = label_w + i * (cell + pad)
+            dr.rectangle([x, y, x + cell - 1, y + cell - 1], fill=tuple(c["rgb"]))
+            dr.text((x, y + cell + 2), c["hex"][1:], fill=ink, font=font)
+            dr.text((x, y + cell + 11), f"L{c['L']:.2f}", fill=dim, font=font)
+        y += cell + 22 + pad
+    img.save(path)
+
+
+def write_images(ramps):
+    draw_swatch(ramps, SWATCH)
+    rgb = [tuple(c["rgb"]) for r in ramps for c in r["colours"]]
+    Image.frombytes("RGB", (len(rgb), 1), bytes(v for c in rgb for v in c)).save(STRIP)
+    print(f"wrote {os.path.relpath(STRIP, ROOT)} and {os.path.relpath(SWATCH, ROOT)}")
 
 
 def main():
@@ -58,6 +99,7 @@ def main():
     with open(DST, "w", newline="\n") as f:
         f.write("\n".join(out) + "\n")
     print(f"wrote {os.path.relpath(DST, ROOT)}: {total} colours in {len(ramps)} ramps")
+    write_images(ramps)
 
 
 if __name__ == "__main__":

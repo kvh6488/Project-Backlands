@@ -2,7 +2,7 @@
 
 A 2D top-down maze survival game built in modern C++20, using Raylib for rendering and Dear ImGui for in-engine debug tooling. The game systems — procedural generation, visibility, lighting, hazards, items and crafting — are written from scratch rather than taken from an engine.
 
-> **Status: work in progress.** Phases 0–3 (the maze) are complete; Phase 4, overworld island generation, is next. The maze generation, visibility, lighting, radiation, item and crafting systems are implemented and playable. Combat, mobs and progression are not yet built. See [Current State](#current-state) for the honest breakdown.
+> **Status: work in progress.** Phases 0–3 (the maze) are complete, and Phase 4 — a procedurally generated overworld island — is built and awaiting a hand-play (`--world overworld`). The maze generation, visibility, lighting, radiation, item and crafting systems are implemented and playable; the island is walkable but has no gameplay yet, and there is no in-game transition between the two worlds. Combat, mobs and progression are not yet built. See [Current State](#current-state) for the honest breakdown.
 
 <!-- TODO: add a GIF here showing maze generation and the flashlight/FOV in motion -->
 
@@ -30,9 +30,13 @@ The design goal was to make each system a real implementation of a computer scie
 | Items & crafting | Grid-parallel item layer, item database, spawner, 20-slot inventory, container inventories, recipe-based crafting |
 | Map mechanics | Craftable paper map (pencil + paper), discoverable magic book of maps, minimap rendering |
 | Zone regeneration | Sections of the maze erase and regenerate at runtime while preserving global connectivity |
-| Architecture | State machine (`game_state` / `playing_state`), domain-driven source layout |
+| Overworld island | 4000×4000-tile wrapping world: noise-built terrain, priority-flood lakes, D8 drainage and rivers, Whittaker biomes, chunked on demand with Poisson-disc props |
+| Overworld rendering | Dual-grid autotiling, a dithered fade shader blending biomes, flowing and swaying water, footprints; every sheet built from the packs by `tools/build_overworld_sheets.py` |
+| Master palette | One 77-colour palette for both worlds, enforced on every sheet by `tools/quantize.py --check` |
+| Architecture | State machine (`GameState` → `MazeState` / `OverworldState`), a `World` base shared by both worlds, layered source layout |
 | Debug tooling | Dear ImGui overlay for camera zoom, flashlight radius and world inspection |
-| Tests | 67 GoogleTest cases covering generation invariants, inventory/crafting, magic book spawning and the headless harness |
+| Headless harness | `--headless <scenario>` drives the game from a script and writes screenshots and telemetry, byte-identical across runs |
+| Tests | 109 GoogleTest cases covering generation invariants, inventory/crafting, magic book spawning, the headless harness and the overworld |
 
 **Not yet implemented**
 

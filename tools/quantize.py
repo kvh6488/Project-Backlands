@@ -10,8 +10,10 @@ nothing else. This is the one tool that enforces it - quantize writes a sheet
 that conforms, --check proves that it does (exit 1 and a per-file report of
 stray pixels otherwise). Run --check on assets/ as the Phase 6 acceptance test.
 
-How: nearest palette entry by Euclidean distance in OKLab (see
-palette_sample.py for why not sRGB). No dithering - pixel art wants flat
+How: nearest palette entry by Euclidean distance in OKLab, not sRGB: two
+greens 30 sRGB units apart can look identical while two greys 30 apart look
+like different materials, and OKLab is (almost) perceptually uniform, so
+"nearest" means nearest to the eye. No dithering - pixel art wants flat
 fills, and a dither would put noise into the 2x2 texel blocks the grid work
 just made uniform. Alpha is preserved unchanged; a pixel with alpha 0 is
 written as transparent black so identical sheets compare byte-for-byte.
@@ -28,9 +30,22 @@ import sys
 import numpy as np
 from PIL import Image
 
-from palette_sample import srgb_to_oklab
-
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# sRGB -> OKLab (Ottosson 2020): linearise, an LMS-like matrix, cube root, a
+# second matrix. The other tools import this from here.
+_M1 = np.array([[0.4122214708, 0.5363325363, 0.0514459929],
+                [0.2119034982, 0.6806995451, 0.1073969566],
+                [0.0883024619, 0.2817188376, 0.6299787005]])
+_M2 = np.array([[0.2104542553, 0.7936177850, -0.0040720468],
+                [1.9779984951, -2.4285922050, 0.4505937099],
+                [0.0259040371, 0.7827717662, -0.8086757660]])
+
+
+def srgb_to_oklab(rgb):
+    c = np.asarray(rgb, dtype=float) / 255.0
+    lin = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    return np.cbrt(lin @ _M1.T) @ _M2.T
 
 
 def load_palette(path):

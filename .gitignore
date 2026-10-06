@@ -18,7 +18,7 @@ bin/
 *.suo
 .vscode/
 
-# Python (for our future Data Science telemetry)
+# Python (tools/)
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
@@ -32,7 +32,7 @@ Thumbs.db
 # ImGui state
 imgui.ini
 
-# Headless harness output and secrets (autonomous workflow plan)
+# Headless harness output and secrets
 artifacts/
 .env
 scenarios/*.out

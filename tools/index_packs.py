@@ -40,7 +40,7 @@ import sys
 import numpy as np
 from PIL import Image
 
-from palette_sample import srgb_to_oklab
+from quantize import srgb_to_oklab
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_PACKS = os.path.join(ROOT, "..", "Asset packs")

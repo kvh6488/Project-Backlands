@@ -1,7 +1,7 @@
 # Master palette
 
-**Status:** approved 2026-09-11 (`tools/palette_sample.py --config yellow12`, 56
-colours); extended for the overworld 2026-10-06 (+16, 72 colours, see
+**Status:** approved 2026-09-11 (sampled from the packs by `tools/palette_sample.py`,
+since retired - see "How it was built"; 56 colours); extended for the overworld 2026-10-06 (+16, 72 colours, see
 "Overworld additions") for the grass-to-forest fade the same day (+2, 74), and for the swamp-water tints (+3, 77).
 Every PNG in `assets/` is quantized to it; `python tools/quantize.py --check assets/`
 is the acceptance test and must stay at 100 %.
@@ -23,17 +23,12 @@ is the acceptance test and must stay at 100 %.
   maps roles (`ink`, `border`, `highlight`, `good`, `bad`, `radiationGlow`…)
   onto ramp steps by hand. UI and renderers name a role. The test
   `PaletteHeader.MatchesStrip` fails if the header and the strip disagree.
-- **Changing the palette** — a new hex, a moved step: edit `palette.json`, run
-  `palette_sample.py --render` and `palette_header.py`, then re-quantize every
-  sheet from its source and reconfigure. The sources are
-  listed in the "Provenance" section below. To *re-derive* the palette from
-  new material (a new pack): add it to `SOURCES` in `palette_sample.py`,
-  re-run, and compare the swatch against this one before adopting it — the
-  sampler proposes, it does not decide. Mind that `assets/` is now quantized:
-  a re-run that samples it reads the palette back and drifts by a few hexes,
-  so a re-derivation must sample the original sheets. To redraw the images
-  from the JSON without sampling: `python tools/palette_sample.py --render`. Adding an entry is cheap; renumbering
-  a ramp is not once the §16.6 lighting depends on step indices.
+- **Changing the palette** — a new hex, a moved step: edit `palette.json` by
+  hand, run `python tools/palette_header.py` (it regenerates the header, the
+  strip and the swatch together), then re-quantize every sheet from its source
+  and reconfigure. The sources are listed in the "Provenance" section below.
+  Adding an entry is cheap; renumbering a ramp is not once the §16.6 lighting
+  depends on step indices.
 - **Overworld sheets** (`ow_*.png` + `src/render/overworld_sprites.hpp`) are built, not quantized one by one:
   `python tools/build_overworld_sheets.py` crops the chosen pack regions,
   applies the recorded edits (High Tides' sea cut out, the red pine
@@ -58,8 +53,6 @@ is the acceptance test and must stay at 100 %.
 Evidence from the gate:
 
 - [palette_swatch.png](../assets/palette_swatch.png) — the ramps.
-- `artifacts/palette_preview/side_by_side.png` — three scenes rendered through
-  the current sheets and through sheets quantized to each candidate palette.
 - `artifacts/palette_preview/carpet_zoom.png` — 4× of the carpet and a table,
   which is where the candidates differ most.
 
@@ -98,6 +91,10 @@ Measured instead of prescribed: maze sheets use 55 colours, overworld sheets
 before the fade greens; those two are used only by ow_shades.png).
 
 ## How it was built
+
+A one-off sampler, `tools/palette_sample.py`, proposed the original 56 colours;
+it was deleted once the palette became hand-maintained (recover it from git
+history to re-derive from a new pack). What it did:
 
 1. **Sample.** Every PNG in `assets/` and in seven packs (`Backrooms Lvl1`,
    `Backrooms Items`, `PostApoc_Workshop`, `BigWander_TheRitual`,
