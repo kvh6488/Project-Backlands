@@ -1,6 +1,6 @@
 # Project Backlands — Roadmap & Reference
 
-> **Living document** — updated as decisions are made. Last updated: **05-10-2026**.
+> **Living document** — updated as decisions are made. Last updated: **06-10-2026**.
 >
 > This is the **plan**: what gets built, and in what order. The **design** — why the game is shaped the way it is — lives in [the_wilderness_update.md](the_wilderness_update.md), referenced below as *wilderness §N*.
 
@@ -134,57 +134,29 @@ The mathematical heart — radiation systems spreading across the grid.
   - **Base Crafting System**: Basic crafting system developed
   - **Classic Map**: Crafted with pen and paper. Upgradeable (one time only) to increase its range. *Conflict note: May remain a fullscreen overlay (leaving player vulnerable) OR change to a minimap.*
 
-### Phase 4 (IN PROGRESS) — The Overworld: Island Generation
-**Status (06-10-2026):** 4.1–4.5 are built and tested; awaiting a hand-play before the phase is marked done. 4.4 landed as: the palette extended to 72 colours, the surface sheets built from four packs by `tools/build_overworld_sheets.py`, 16-tile corner autotiling on a dual grid (the 47-tile blob set moves to Phase 9), and props drawn from per-biome sprite pools with every tree variant (full-orange autumn held for Phase 5's seasons). Rivers use flow accumulation over the priority-flooded surface (every cell drains downhill; rivers are cells with enough upstream area) rather than walking from hand-picked sources: same downhill rule, but merging and termination fall out of it. Water is walkable until Phase 9.
+### Phase 4 (COMPLETE) — The Overworld: Island Generation
+The surface now matches the maze's standard: generated from a seed, rendered on the shared grid, walkable, and covered by tests and headless runs. Generation only — no entrances, seasons or survival systems.
 
-Bring the surface up to where the maze already is: generated from a seed, rendered on the shared grid, walkable, and covered by tests and headless runs. **Generation only** — no entrances, no seasons, no survival systems.
+- **Two-world seam.** `Run` owns the seed and `Player` (bag included) above the states. `World` is the shared base of `Maze` and `Overworld` (toroidal geometry plus a narrow virtual contract), so `Player`, `UIManager` and `ItemRenderer` no longer depend on `Maze&`. `PlayingState` became `MazeState`; `OverworldState` sits beside it, started with `--world overworld`. No in-game transition yet (Phase 6).
+- **Island shape and storage.** A 4000×4000 wrapping world with a ~2.7k-tile island and ≥500 tiles of open ocean to the seam, so no generator has to be seamless across the wrap. Height, temperature and moisture are pure functions of (x, y, seed) on our own noise. Whole-island passes run once on a coarse grid (1 cell = 8×8 tiles); fine detail lives in 32×32 chunks built on demand and evicted by distance, with a sparse change record so a removed prop stays removed.
+- **Generation pipeline.** Ocean flood → priority-flood depression filling → lakes → D8 drainage and flow accumulation → rivers (cells with enough upstream area, so each ends in a lake or the ocean by construction; this replaced walking from hand-picked sources) → swamps and coastal scrub → distance fields → Whittaker biome lookup. Coarse data reaches tiles only through smooth fields. Spawn is inland on grassland. Props come from per-chunk Bridson Poisson-disc points thinned by biome density; spacing holds across chunk borders. Points are memoised and one chunk is prefetched per tick.
+- **Rendering.** `OverworldRenderer` autotiles on a dual grid (16 corner shapes; the 47-tile blob set moves to Phase 9), blends biomes with a dithered fade shader, and flows water by world position. Props go through the Y-sorted `DrawQueue`, now shared with the maze. The master palette grew to 72 colours (since 77) and the surface sheets are built from four packs by `tools/build_overworld_sheets.py`. Footprints (`StepEffects`) are presentation only.
+- **Tooling and tests.** `OverworldState::snapshot` telemetry, four headless scenarios (walk, wrap seam, coast, coastal scrub), a debug-panel island map with new-seed and remove-prop buttons, and `tests/test_overworld.cpp` covering determinism, spawn, rivers, the open-ocean seam, prop spacing, the change record, prefetch and the renderer's pure parts.
+- **Deferred.** Water is walkable until Phase 9 (no swimming or boat). Full-orange autumn trees wait for Phase 5's seasons. Height has no effect on movement.
 
-**Exit criteria:** one seed fully determines the island; the player can walk it; biomes, height, rivers and lakes read as governed rather than random; headless scenarios and tests cover all of it.
-
-**4.1 — The two-world seam** *(first; everything else builds on it)*
-- **`Run`** — a new object owning what outlives either world: seed, `Player`, inventory (and later the day counter). Owned above the states; states borrow it.
-- **A narrow world interface** — is this cell solid, what item is here, take/place an item. `Maze` and the new overworld both implement it; `Player`, `UIManager` and `ItemRenderer` depend on it instead of on `Maze&`.
-- `PlayingState` is renamed **`MazeState`**; **`OverworldState`** is added beside it. `GameState` was built for exactly this.
-- A dev flag `--world overworld` starts on the surface. No in-game transition yet (Phase 6).
-
-**4.2 — World shape and storage**
-- **A finite island in a wrapping ocean.** The world is a fixed `W × H` that wraps toroidally, like the maze — the only thing the two share; storage is separate. The island starts at **~2k tiles across** with **≥500 tiles of open ocean** on every side, growing toward ~8k once the generation is solid. The wrap seam always lies in open ocean, so no generator has to be seamless across it; only player position, camera/culling and the chunk cache are wrap-aware.
-- **Height = the land score**: `noise(x, y) − falloff(distance from centre)`. Land where it clears a threshold; the coast is where it crosses. Mountains rise in the middle; islets and outlying islands fall out naturally and are kept. Height is a **pure function** of position and seed — computed on demand, never stored.
-- **Coarse grid** — one cell per 8×8 tiles (~256×256 at 2k). Holds what needs a whole-island pass: biomes, lakes and the river network. Built once at world creation.
-- **Chunks** — fine detail (trees, rocks, bushes, resources) for a 32×32-tile chunk is generated on demand from `hash(seed, chunkX, chunkY)` and discarded when far from the camera. Same inputs, same chunk, so memory does not scale with world size.
-- **Chunk change record** — anything the player alters (a removed prop) is kept in a sparse map keyed by tile and re-applied when a chunk regenerates, so a felled tree stays felled. Same pattern as `Maze::m_itemStates`. Built now, exercised by a debug "remove prop" button.
-- Generation constants are **compile-time**, not live settings — the island is built once before the player loads in. The debug panel gets a **"new seed → regenerate"** button that goes through the shipping entry point.
-
-**4.3 — Generation pipeline** (one seeded RNG, like the maze)
-1. **Height field** — `noise − falloff(distance from centre)`. The falloff makes the island high in the middle and sink into the sea at the edge; the noise adds the hills and dips that give rivers somewhere to run and lakes somewhere to pool.
-2. **Lakes** — pits in the height field (local minima) become lakes. Some lakes receive no river and stay as lone lakes.
-3. **Rivers flow downhill** — sources on high ground walk to their lowest neighbour until they reach the ocean or a lake; a pit fills into a lake and the river continues from its lowest rim (priority-flood). Every river therefore ends at a lake or the ocean by construction; where two meet, they merge.
-4. **Temperature and moisture** — temperature = base + noise − height (higher is colder); moisture = noise + a bonus near water.
-5. **Biomes** — height bands decide beach, mountain and snow peak; a **Whittaker lookup** (temperature × moisture → biome) decides the rest. Starter set: **ocean, beach, grassland, forest, wetland, mountain, snow peak**.
-6. **Spawn inland** — in the mid-height band between coast and mountains, on the grassland cell nearest the island centre; never a lake, river or mountain.
-7. **Scatter** — Bridson Poisson-disc sampling per chunk, densities set by biome. Each chunk also regenerates its neighbours' points so minimum spacing holds across chunk borders.
-
-**4.4 — Rendering**
-- **Flat**, for now. Height shows only through biome tiles (sand → grass → rock → snow) — no hillshading, no cliffs. Height has **no effect on movement**, for now.
-- `OverworldRenderer` in `render/`, with wrap-aware chunk culling.
-- **Y-sorted render queue** shared by both worlds, replacing the maze's three fixed layers: one drawable queue sorted by base Y in world pixels, bucket-sorted (O(k)).
-- **16-tile (corner) autotiling** for biome and coast borders; the 47-tile blob upgrade is a Phase 9 polish item.
-- **Art from the packs first** — Pixel Crawler `Floors_Tiles`, `Water_tiles`, `Vegetation`, `Trees/`, `Rocks`. Sand/beach has no pack match and is the likely first `/generate-asset`.
-- **First task: a test quantize of the Pixel Crawler sheets.** The master palette was sampled mostly from underworld art and fits those sheets poorly before quantizing. If greens and blues flatten, extend the palette (approved by hand, as before).
-
-**4.5 — Tooling and tests**
-- `OverworldState::snapshot` telemetry: cell, chunk, height, biome, nearby props.
-- Headless scenarios: a surface walk, and one that crosses the wrap seam.
-- Debug overlay: whole-island minimap, with height and biome views.
-- Tests: same seed → same island; spawn is inland, mid-height, not water; every river ends at a lake or the ocean; lone lakes exist; Poisson spacing holds across chunk borders; a removed prop stays removed after its chunk regenerates; wrap continuity at the seam.
-
-**Not in Phase 4:** maze entrances and set pieces, the overworld ↔ maze transition, seasons, weather, survival meters, the day counter, height affecting movement.
+**Not in Phase 4:** maze entrances and set pieces, the overworld ↔ maze transition, seasons, weather, survival meters, the day counter.
 
 ### Phase 5 — Seasons & the Day Counter
 The surface's clock (wilderness §4).
 - **Day counter** — one counter from Day 0 of the run, never resets, never runs at a different rate below. It is the score and the source of every unlock gate. Day/night time-of-day underneath it.
 - **Seasons** — the surface reads the day count cyclically: spring → summer → autumn → winter. A season shifts the temperature field, so the snow line moves and water freezes and thaws.
 - **`seasonalDrift`** — the hidden accumulator that makes seasons run fast while below (wilderness §4.3). Stubbed here; it accrues once Phase 6 connects the worlds.
+
+### Phase 5.5 — Pre-Connection Refactor
+Structural work that Phase 6 depends on, from the 06-10-2026 architecture review. No new gameplay.
+- **Worlds move into `Run`.** Today `OverworldState` owns the `Overworld` (change record included) and `MazeState` owns the `Maze`, so a state switch would destroy them. `Run` owns both worlds; states only borrow and draw them. The maze must also keep advancing while the player is on the surface (sleep shifts it), so its simulation cannot live only inside `MazeState::update`.
+- **Per-system RNG streams.** Gameplay still draws from raylib's global `GetRandomValue` (pass-out teleport, magic-book roll, radiation flicker) beside the seeded `mt19937`s. Give each system its own stream, seeded from the run seed and owned by `Run`, so adding a system never shifts another's rolls and headless replays stay byte-identical.
+- **Tooling hardening** *(cheap, any time before Phase 8)*: `-Wall -Wextra` (and `-Werror` once clean) in CMake; pin ImGui and rlImGui to commits; build the game sources once as a static library shared by both executables; a CI job that builds and runs the tests and the headless scenarios; a sanitizer build; move `DebugOverlay` behind an interface so `states/` no longer includes `dev/` and a release build can drop it.
 
 ### Phase 6 — Two Worlds Connected
 The overworld ↔ maze round trip, and with it a playable core loop.
@@ -196,6 +168,8 @@ The overworld ↔ maze round trip, and with it a playable core loop.
 - Open: do entrance locations survive the maze's shifting zones?
 
 ### Phase 7 — Core Loop: Survival, Sleep, Death & Main Menu
+- **First: split `Player` and add an event queue** *(from the 06-10-2026 review)*. `Player` currently holds movement, collision, inventory, recipes, the trip state machine and ten `pollEventX` flags; survival meters and mobs would pile onto it. Pull out a shared entity core (position, collision) that mobs reuse in Phase 8, with vitals and the trip as their own parts; replace the per-flag polling with one typed event queue that states drain. Thin `MazeState::update` the same way (popups and debug triggers out of the gameplay path).
+- **Save layer** — a serialization boundary for `Run` (seed, day, player, both worlds' change records). The change-record design keeps this small; it is the prerequisite for the camp save below.
 - **Main menu** — start a run, see stats like longest run survived.
 - **Health & death** — player damage, death animations, ability/disability icon HUD. Radiation slows health regen.
 - **Permadeath in both worlds** — any death resets to Day 0 on a new world seed. Stats screen on death (days survived, % mapped, kills).
@@ -205,6 +179,7 @@ The overworld ↔ maze round trip, and with it a playable core loop.
 - Open: single-slot save at a camp (wilderness §6).
 
 ### Phase 8 — Mobs & Maze Escalation
+- **First: fixed-step accumulator.** The loop runs one 1/60 s tick per rendered frame, so a frame over 16.7 ms slows the game rather than catching up. Fine at today's ~0.9 ms; switch to an accumulator (still deterministic) before flow fields and mob pools raise the cost.
 - **Escalation curve** — three stages anchored on `discoveryDay` / `entryDay` (wilderness §4.2), driving shift aggression, layout confusion, radiation strength/spread and mob spawn rates.
 - **Navigation & combat:**
   - Dijkstra flow-field generation.
