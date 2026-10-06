@@ -5,7 +5,7 @@
 #include <deque>
 
 Overworld::Overworld(uint32_t seed, const IslandConfig &cfg)
-    : World(cfg.size, cfg.size, grid::CELL), m_island(seed, cfg),
+    : World(cfg.size, cfg.size, grid::CELL), m_island(seed, cfg), m_climate(m_island),
       m_chunksAcross(cfg.chunksAcross()) {}
 
 int Overworld::chunkKey(int cx, int cy) const {
@@ -44,7 +44,6 @@ PropType Overworld::rollProp(Biome b, uint8_t shade, int x, int y,
       /* WETLAND   */ {{PropType::REEDS, 0.28f}, {PropType::TREE, 0.16f},
                        {PropType::BUSH, 0.06f}},
       /* MOUNTAIN  */ {{PropType::ROCK, 0.16f}, {PropType::PINE, 0.08f}},
-      /* SNOW      */ {{PropType::PINE, 0.04f}, {PropType::ROCK, 0.04f}},
       // ~65 % of the forest's trees, short ones and palms (spriteFor).
       /* COASTAL   */ {{PropType::TREE, 0.45f}, {PropType::BUSH, 0.12f},
                        {PropType::ROCK, 0.02f}},
@@ -55,6 +54,9 @@ PropType Overworld::rollProp(Biome b, uint8_t shade, int x, int y,
                                                {PropType::BUSH, 0.06f}};
   static const std::vector<Odds> kMeadowEdge = {
       {PropType::TREE, 0.22f}, {PropType::BUSH, 0.12f}, {PropType::ROCK, 0.02f}};
+  // Alpine peaks are sparse: a few hardy trees among the boulders.
+  static const std::vector<Odds> kAlpine = {{PropType::PINE, 0.04f},
+                                            {PropType::ROCK, 0.04f}};
   static const std::vector<Odds> kForestEdge = {{PropType::TREE, 0.45f},
                                                 {PropType::BUSH, 0.12f}};
   const std::vector<Odds> *odds = &kTable[(int)b];
@@ -66,6 +68,8 @@ PropType Overworld::rollProp(Biome b, uint8_t shade, int x, int y,
     odds = &kDuneBeach;
   else if (b == Biome::COASTAL && shade == 1)
     odds = &kSandPatch;
+  else if (b == Biome::MOUNTAIN && shade == 1)
+    odds = &kAlpine;
   uint32_t seed = m_island.seed();
   float roll = noise::unit(x, y, seed ^ 0x7a3e11c5u);
   variant = (uint8_t)(noise::hash(x, y, seed ^ 0x1b873593u) & 0xffu);
@@ -97,6 +101,8 @@ Overworld::Chunk Overworld::build(int cx, int cy) const {
       c.height[y * kChunk + x] = s.height;
       c.shade[y * kChunk + x] = s.shade;
       c.flow[y * kChunk + x] = s.flow;
+      c.drift[y * kChunk + x] = s.drift;
+      c.temperature[y * kChunk + x] = s.temperature;
     }
   }
   c.propIndex.fill(-1);
@@ -202,6 +208,32 @@ uint8_t Overworld::flowAt(int x, int y) const {
   y = wrapY(y);
   const Chunk &c = chunk(x / kChunk, y / kChunk);
   return c.flow[(y % kChunk) * kChunk + (x % kChunk)];
+}
+
+uint8_t Overworld::driftAt(int x, int y) const {
+  x = wrapX(x);
+  y = wrapY(y);
+  const Chunk &c = chunk(x / kChunk, y / kChunk);
+  return c.drift[(y % kChunk) * kChunk + (x % kChunk)];
+}
+
+float Overworld::temperatureAt(int x, int y) const {
+  x = wrapX(x);
+  y = wrapY(y);
+  const Chunk &c = chunk(x / kChunk, y / kChunk);
+  return c.temperature[(y % kChunk) * kChunk + (x % kChunk)];
+}
+
+float Overworld::celsiusAt(int x, int y, const Calendar &cal) const {
+  return m_climate.celsius(temperatureAt(x, y), cal);
+}
+
+bool Overworld::snowAt(int x, int y, const Calendar &cal) const {
+  return m_climate.snow(temperatureAt(x, y), biomeAt(x, y), cal.yearDay());
+}
+
+bool Overworld::frozenAt(int x, int y, const Calendar &cal) const {
+  return m_climate.frozen(temperatureAt(x, y), heightAt(x, y), biomeAt(x, y), cal.yearDay());
 }
 
 const Prop *Overworld::findProp(int x, int y) const {

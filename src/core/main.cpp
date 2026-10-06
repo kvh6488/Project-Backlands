@@ -22,6 +22,7 @@ int main(int argc, char **argv) {
   if (devmode::overworldFromArgs(argc, argv)) {
     cfg.startWorld = StartWorld::OVERWORLD;
   }
+  cfg.startDay = devmode::startDayFromArgs(argc, argv);
 
   headless::Options hl = headless::parseArgs(argc, argv);
   if (!hl.error.empty()) {
@@ -49,6 +50,10 @@ int main(int argc, char **argv) {
     cfg.startWorld = StartWorld::OVERWORLD;
   } else if (sc.world == "MAZE") {
     cfg.startWorld = StartWorld::MAZE;
+  }
+  if (sc.hasDay) {
+    cfg.startDay = sc.day;
+    cfg.startHour = sc.hour;
   }
   cfg.hasSpawnOverride = sc.hasSpawn;
   cfg.spawnX = sc.spawnX;

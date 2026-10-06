@@ -44,13 +44,15 @@ public:
 
   void loadTextures();
 
-  // The mark a foot leaves on this ground (and its shade step). Pure.
-  static Mark markFor(Biome ground, uint8_t shade = 0);
+  // The mark a foot leaves on this ground (and its shade step), with or
+  // without snow lying on it. Pure.
+  static Mark markFor(Biome ground, uint8_t shade = 0, bool snow = false);
 
   // One tick. `footfall` is PlayerRenderer::pollFootfall(). A footfall
   // within kMinStepPx of the last one (walking into a tree) leaves nothing.
+  // `cal` says where snow lies.
   void update(const Overworld &world, const Player &player, bool footfall,
-              float dt);
+              float dt, const Calendar &cal);
 
   // update()'s two halves, public so a test can drive them without a
   // player: leave `mark` at `foot` (world px) made walking `facing`, sorting

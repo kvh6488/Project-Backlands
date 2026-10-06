@@ -57,6 +57,13 @@ struct Telemetry {
   bool cupboardOpen = false;
   bool fullscreenMapOpen = false;
 
+  // --- clock (both worlds) ---
+  int day = 0;            // the run's day counter
+  std::string season;     // seasonId
+  int dayOfSeason = 0;    // 1-based
+  float timeOfDay = 0.0f; // hours
+  float yearDay = 0.0f;   // Calendar::yearDay
+
   // --- world ---
   std::vector<Slot> inventory;       // occupied slots only
   std::vector<WorldItem> visibleItems; // items inside cameraRect that would draw
@@ -72,6 +79,8 @@ struct Telemetry {
   int chunkX = 0, chunkY = 0;             // chunk holding that cell
   float height = 0.0f;                    // terrain height there (sea = 0)
   std::string biome;
+  float celsius = 0.0f;                   // at the player's tile, now
+  bool snow = false;                      // snow lies on the player's tile
   std::vector<WorldItem> nearbyProps;     // props within kPropRadius tiles
   int cachedChunks = 0;
   int spawnX = 0, spawnY = 0;

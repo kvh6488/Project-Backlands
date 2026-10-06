@@ -67,6 +67,7 @@ set(BACKLANDS_GAME_SOURCES
     src/world/generators/island_generator.cpp
     src/world/generators/poisson.cpp
     src/world/island.cpp
+    src/world/climate.cpp
     src/world/overworld.cpp
     src/entities/player.cpp
     src/items/item_database.cpp
@@ -145,6 +146,7 @@ add_executable(BacklandsTests
     tests/test_inventory.cpp
     tests/test_harness.cpp
     tests/test_overworld.cpp
+    tests/test_seasons.cpp
     ${BACKLANDS_GAME_SOURCES}
     ${BACKLANDS_DEV_SOURCES}
     ${BACKLANDS_VENDOR_SOURCES}

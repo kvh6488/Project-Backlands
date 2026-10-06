@@ -18,9 +18,14 @@
 // gives the game a way up and down; --world maze (the default) is accepted
 // for symmetry.
 //
+// --day N starts the run's clock on Day N (morning) instead of Day 0, to look
+// at a season without waiting for it: --day 0 is mid-spring, 10 mid-summer's
+// start, 30 the start of autumn, 60 midwinter.
+//
 // Header-only so no CMakeLists.txt source-list edits are needed.
 // ============================================================================
 
+#include <cstdlib>
 #include <cstring>
 
 namespace devmode {
@@ -42,6 +47,18 @@ inline bool overworldFromArgs(int argc, char **argv) {
     }
   }
   return false;
+}
+
+// The N of "--day N", or -1 when absent or not a non-negative integer.
+inline int startDayFromArgs(int argc, char **argv) {
+  for (int i = 1; i < argc - 1; ++i) {
+    if (std::strcmp(argv[i], "--day") == 0) {
+      char *end = nullptr;
+      long v = std::strtol(argv[i + 1], &end, 10);
+      return end != argv[i + 1] && *end == '\0' && v >= 0 ? (int)v : -1;
+    }
+  }
+  return -1;
 }
 
 } // namespace devmode

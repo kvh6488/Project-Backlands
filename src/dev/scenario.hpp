@@ -11,6 +11,7 @@
 //   seed 1788480606      pin the world  (else --seed, else the clock)
 //   world overworld      start world: maze (default) or overworld
 //   spawn 3060 1536      start on this tile, not the world's spawn
+//   day 60 [12]          start the clock on run day 60 (at hour 12; else 8)
 //   window 1280 720      pin the window (default 1280x720)
 //   scale 1.5            blit scale: one of 1 1.5 2 3 (default 1.5)
 //   wait N               N idle ticks
@@ -60,6 +61,9 @@ struct Scenario {
   std::string world;     // "MAZE", "OVERWORLD", or empty = not pinned
   bool hasSpawn = false;
   int spawnX = 0, spawnY = 0;
+  bool hasDay = false;
+  int day = 0;
+  float hour = 8.0f; // Calendar::kStartHour
   int windowW = 1280;
   int windowH = 720;
   float blitScale = RenderSettings{}.blitScale;
@@ -159,6 +163,18 @@ inline bool parseText(const std::string &text, Scenario &out,
           !parseInt(tok[2], out.spawnY))
         return fail("spawn takes a tile x and y");
       out.hasSpawn = true;
+      continue;
+    }
+    if (op == "DAY") {
+      if ((!argc(1) && !argc(2)) || !parseInt(tok[1], out.day) || out.day < 0)
+        return fail("day takes a run day >= 0 and an optional hour");
+      if (argc(2)) {
+        char *end = nullptr;
+        out.hour = std::strtof(tok[2].c_str(), &end);
+        if (end == tok[2].c_str() || *end != '\0' || out.hour < 0.0f || out.hour >= 24.0f)
+          return fail("day's hour must be in [0, 24)");
+      }
+      out.hasDay = true;
       continue;
     }
     if (op == "WINDOW") {

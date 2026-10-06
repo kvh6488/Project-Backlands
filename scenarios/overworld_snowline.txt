@@ -1,0 +1,12 @@
+# The edge of the mountain snow on the run's first day (mid-spring) on seed 1:
+# snow on the high ground to the west, bare mountain to the east. Run with
+# --day N (and drop the day line) to watch the same edge in another season.
+seed 1
+world overworld
+spawn 2080 1716
+day 0
+window 1280 720
+scale 1.5
+
+checkpoint snowline
+end

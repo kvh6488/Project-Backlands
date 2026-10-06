@@ -24,6 +24,10 @@ Outputs, all the renderer loads:
                   a quarter, half and three quarters of the way from lake
                   blue to the murk, then the murk itself. The renderer steps
                   through them away from open water
+  ow_ice.png      ice on frozen lakes and mountain rivers: one 256px square
+                  that tiles with itself - pale ice clouded in patches,
+                  clearer where the water shows, and thin lit cracks. The
+                  fade shader draws it over the water, unswayed
   ow_glints.png   a glint's three frames (a spark, a cross, a spark)
   ow_steps.png    what feet leave (StepEffects): a snow boot print per
                   facing, each again half filled in; then the wetland
@@ -116,6 +120,7 @@ SOURCES = {
     "willow":   (SW + "/objects&items/swamp objects.png", (96, 0, 288, 208)),
     "palm":     (HT + "/Objects/Foliage.png", None),
     "lb_bush":  (LB + "/Environment/Vegetation/bushes.png", None),
+    "pc_veg":   (PC + "/Props/Static/Vegetation.png", None),
     "lb_rock":  (LB + "/Environment/Deco/rocks.png", None),
     "pc_rock":  (PC + "/Props/Static/Rocks.png", (0, 16, 208, 304)),  # drops the "PALETTE:" label
     "reeds":    (SW + "/objects&items/swamp water objects.png", None),
@@ -235,6 +240,15 @@ PROPS = (
     + boxes("palm", [("PALM_TALL", (53, 12, 36, 84)), ("PALM_SHORT", (7, 39, 33, 57))])
     + boxes("lb_bush", [("BUSH_A", (16, 99, 32, 29)), ("BUSH_B", (81, 103, 28, 25)), ("BUSH_C", (16, 147, 32, 29)),
                         ("BUSH_D", (81, 148, 31, 27)), ("BUSH_LOW", (1, 32, 31, 16)), ("BUSH_SMALL", (34, 3, 13, 13))])
+    # Pixel Crawler bushes, four sizes in four colours down the year (green,
+    # olive, tan, rust; 48 px columns), and the two bare shrubs they and the
+    # LightBorne bushes stand as in winter, plus a twig for the smallest.
+    # Sizes 2 and 3 touch; row 64 is the split.
+    + [(f"PCB_S{size}_{colour}", "pc_veg", (col * 48 + x0, y0, col * 48 + x1, y1))
+       for size, (x0, y0, x1, y1) in enumerate([(0, 5, 34, 32), (0, 32, 48, 64), (0, 64, 48, 97), (0, 99, 48, 142)], 1)
+       for col, colour in enumerate(("GREEN", "OLIVE", "TAN", "RUST"))]
+    + boxes("pc_veg", [("SHRUB_BARE_A", (197, 65, 34, 31)), ("SHRUB_BARE_B", (196, 98, 39, 46)),
+                       ("SHRUB_TWIG", (243, 2, 9, 11))])
     + boxes("lb_rock", [("ROCK_GREY_0", (3, 7, 10, 8)), ("ROCK_GREY_1", (17, 4, 14, 11)), ("ROCK_GREY_2", (33, 1, 31, 14)),
                         ("ROCK_GREY_3", (66, 2, 13, 13)), ("ROCK_GREY_4", (81, 2, 14, 13)), ("ROCK_GREY_BIG", (99, 12, 26, 19)),
                         ("ROCK_MOSS_1", (17, 20, 14, 11)), ("ROCK_MOSS_2", (33, 17, 31, 14)), ("ROCK_MOSS_3", (66, 18, 13, 13))])
@@ -261,10 +275,16 @@ PROPS = (
                     ("DECAL_STICK", (128, 0, 12, 5)), ("DECAL_MOUND_A", (144, 0, 14, 7)),
                     ("DECAL_MOUND_B", (160, 0, 10, 5))])
 )
+# Every evergreen's winter frame: the same crop with snow_laden applied, so
+# the silhouette is the green frame's to the pixel.
+SNOW_LADEN = ([f"PC2_S{s}_{c}" for s in (2, 3, 4, 5) for c in ("TEAL", "TEAL_B", "GREEN", "GREEN_B")]
+              + [f"FIR_{i}" for i in range(5)] + [f"FIR_DARK_{i}" for i in range(4)])
+PROPS += [(f"{n}_SNOW", sheet, box) for n, sheet, box in PROPS if n in SNOW_LADEN]
 # Per-sprite recolours after quantizing. Pixel Crawler's broadleaf greens
 # are a lime that glows against every other tree: one step darker each.
 # High Tides' palm fronds quantize to the accent lime: same treatment.
 PROP_RECOLOUR = {f"PC1_S{s}_GREEN": {"#91ca51": "#69a754", "#69a754": "#55834c"} for s in (2, 3, 4, 5)}
+PROP_RECOLOUR.update({f"PCB_S{s}_GREEN": {"#91ca51": "#69a754", "#69a754": "#55834c"} for s in (1, 2, 3, 4)})
 PROP_RECOLOUR.update({n: {"#95da41": "#69a754"} for n in ("PALM_TALL", "PALM_SHORT")})
 ATLAS_TILES = 40  # atlas width in tiles
 WATERLINE = 11    # art-px row of a prop's bottom tile the lapping water reaches
@@ -282,6 +302,29 @@ def snow_cap(rock):
         ys = np.nonzero(out[:, x, 3] > 0)[0]
         for k, y in enumerate(ys[:3]):
             out[y, x, :3] = hexrgb(("#a6b7c6", "#dfe3ed", "#bdd5de")[k])
+    return out
+
+
+def snow_laden(tree):
+    """An evergreen under snow, without moving a pixel of its outline. A
+    needle pixel is the top of a bough when the pixel above it is air or a
+    darker shadow line; the three pixels from there down become snow, snow,
+    and the snow's shadow. Trunk (red over green) and the bottom seventh -
+    the roots - stay bare."""
+    out = tree.copy()
+    op = out[..., 3] > 0
+    rgb = tree[..., :3].astype(int)
+    lum = rgb @ np.array([0.3, 0.59, 0.11])
+    needles = op & ~(rgb[..., 0] > rgb[..., 1] + 10)
+    ys = np.nonzero(op.any(axis=1))[0]
+    needles[ys[-1] - max(3, (ys[-1] - ys[0]) // 7):] = False
+    air_above = np.vstack([np.ones((1, op.shape[1]), bool), ~op[:-1]])
+    dark_above = np.vstack([np.zeros((1, op.shape[1]), bool), op[:-1] & (lum[:-1] < lum[1:] - 25)])
+    h = op.shape[0]
+    for y, x in zip(*np.nonzero(needles & (air_above | dark_above))):
+        for k, colour in enumerate(("#dfe3ed", "#dfe3ed", "#bdd5de")):
+            if y + k < h and needles[y + k, x]:
+                out[y + k, x, :3] = hexrgb(colour)
     return out
 
 
@@ -456,6 +499,56 @@ def swamp_water_sheet():
     for i, v in enumerate(order):
         a[i // 4 * T:(i // 4 + 1) * T, i % 4 * T:(i % 4 + 1) * T] = fills[v]
     return np.concatenate([recolour(a, tint) for tint in SWAMP_TINTS], axis=0)
+
+
+def periodic_noise(n, cells, rng):
+    """n x n smooth value noise on a `cells` x `cells` random lattice that
+    wraps, so the result tiles with itself. Values in [0, 1]."""
+    lattice = rng.random((cells, cells))
+    t = np.arange(n) * cells / n
+    i0 = np.floor(t).astype(int)
+    f = t - i0
+    f = f * f * (3 - 2 * f)
+    i1 = (i0 + 1) % cells
+    rows = lattice[i0][:, None, :] * (1 - f)[:, None, None] + lattice[i1][:, None, :] * f[:, None, None]
+    return rows[:, 0, i0] * (1 - f) + rows[:, 0, i1] * f
+
+
+def ice_sheet():
+    """Ice over lakes and mountain rivers: pale ice clouded in patches,
+    clearer ice where the water shows through, and long thin cracks with a
+    lit edge. One 256px square (16 tiles, so a frozen lake shows no
+    repeat) that tiles with itself: the patches are value noise on a
+    wrapping lattice, and the cracks wrap round the edges."""
+    n = 16 * T
+    body, cloud, clear = hexrgb("#bdd5de"), hexrgb("#a6b7c6"), hexrgb("#91d6e8")
+    crack, lit = hexrgb("#829da5"), hexrgb("#dfe3ed")
+    rng = np.random.default_rng(53)
+    field = 0.7 * periodic_noise(n, 16, rng) + 0.3 * periodic_noise(n, 64, rng)
+    a = np.zeros((n, n, 4), np.uint8)
+    a[:] = (*body, 255)
+    a[field > 0.72, :3] = cloud
+    a[field < 0.27, :3] = clear
+    # Cracks: random walks that mostly keep their heading, a lit pixel above
+    # each step, and now and then a short branch.
+    steps = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)]
+
+    def walk(x, y, d, length, branch):
+        for _ in range(length):
+            if a[(y - 1) % n, x % n, 0] != crack[0]:
+                a[(y - 1) % n, x % n, :3] = lit
+            a[y % n, x % n, :3] = crack
+            r = rng.random()
+            if r < 0.35:
+                d = (d + int(rng.choice([-1, 1]))) % 8
+            elif branch and r > 0.93:
+                walk(x, y, (d + int(rng.choice([-2, 2]))) % 8, int(rng.integers(3, 7)), False)
+            x, y = x + steps[d][0], y + steps[d][1]
+
+    for _ in range(26):
+        walk(int(rng.integers(0, n)), int(rng.integers(0, n)), int(rng.integers(0, 8)),
+             int(rng.integers(18, 30)), True)
+    return a
 
 
 def glints_sheet():
@@ -882,6 +975,8 @@ def props_atlas(src):
         a = main_body(a)
         if name in PROP_RECOLOUR:
             a = recolour(a, PROP_RECOLOUR[name])
+        if name.endswith("_SNOW"):
+            a = snow_laden(a)
         ys, xs = np.nonzero(a[..., 3] > 0)
         a = a[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
         h, w = a.shape[:2]
@@ -994,6 +1089,7 @@ def main():
     save(water_sheet(), os.path.join(assets, "ow_water.png"))
     save(river_sheet(), os.path.join(assets, "ow_river.png"))
     save(swamp_water_sheet(), os.path.join(assets, "ow_swamp_water.png"))
+    save(ice_sheet(), os.path.join(assets, "ow_ice.png"))
     save(glints_sheet(), os.path.join(assets, "ow_glints.png"))
     save(steps_sheet(), os.path.join(assets, "ow_steps.png"))
     save(src["coast"], os.path.join(assets, "ow_coast.png"))

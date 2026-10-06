@@ -40,6 +40,13 @@ TileSample Island::sample(int x, int y) const {
 
   TileSample out;
   out.height = m_field.height(px, py);
+  // Every tile, water too: a thermometer reads over a lake as well.
+  out.temperature = m_field.temperature(px, py, out.height);
+  // Where snow banks into drifts, whenever there is snow; on all land, since
+  // winter snow reaches the grass and forest too.
+  const float drift = noise::gradient(px / 19.0f, py / 13.0f, m_seed ^ 0xd51f7u) +
+                      0.4f * noise::gradient(px / 6.0f, py / 5.0f, m_seed ^ 0x2f00du);
+  out.drift = drift > 0.12f ? 1 : 0;
 
   const int cx = x / IslandConfig::kCoarse, cy = y / IslandConfig::kCoarse;
   // A smooth field, not "any ocean cell in the 3x3 block": that yes/no answer
@@ -110,7 +117,6 @@ TileSample Island::sample(int x, int y) const {
     return out;
   }
 
-  out.temperature = m_field.temperature(px, py, out.height);
   out.moisture = island::landMoisture(m_field.moistureNoise(px, py),
                                       distAt(m_map.waterDist, px, py),
                                       distAt(m_map.swampDist, px, py));
@@ -150,10 +156,8 @@ TileSample Island::sample(int x, int y) const {
                    0.02f * noise::gradient(px / 6.0f, py / 6.0f, m_seed ^ 0x5ade1u);
     out.shade = out.biome == Biome::GRASSLAND ? (margin > kMeadowMargin ? 1 : 0)
                                               : (margin > kDeepForestMargin ? 3 : 2);
-  } else if (out.biome == Biome::SNOW) {
-    float drift = noise::gradient(px / 19.0f, py / 13.0f, m_seed ^ 0xd51f7u) +
-                  0.4f * noise::gradient(px / 6.0f, py / 5.0f, m_seed ^ 0x2f00du);
-    out.shade = drift > 0.12f ? 1 : 0;
+  } else if (out.biome == Biome::MOUNTAIN) {
+    out.shade = out.temperature < biome::kAlpineTemperature ? 1 : 0;
   }
   return out;
 }

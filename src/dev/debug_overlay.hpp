@@ -6,6 +6,7 @@
 #include "world/maze.hpp"
 #include "world/overworld.hpp"
 #include <string>
+#include <vector>
 
 // ============================================================================
 // DebugOverlay — Development tooling, kept out of the shipping UI
@@ -48,10 +49,11 @@ public:
   // to call inside BeginDrawing but not inside a BeginTextureMode block.
   void render(Player &player, Maze &maze, RenderSettings &settings,
               float scale);
-  // The surface's panel: island stats, the whole-island map, and the
-  // regenerate / remove-prop requests. Shares the View section.
-  void render(Player &player, Overworld &world, RenderSettings &settings,
-              float scale);
+  // The surface's panel: the clock and climate readouts, island stats, the
+  // whole-island map, and the regenerate / remove-prop / set-date requests.
+  // Shares the View section.
+  void render(Player &player, Overworld &world, const Calendar &cal,
+              RenderSettings &settings, float scale);
 
   // The minimap caches the whole maze as a texture. Anything that changes
   // layout must mark it dirty.
@@ -79,6 +81,15 @@ public:
   void clearNewIsland() { m_triggerNewIsland = false; }
   bool triggerRemoveProp() const { return m_triggerRemoveProp; }
   void clearRemoveProp() { m_triggerRemoveProp = false; }
+  // Scrub the clock to requestedYearDay() within the current summer-to-
+  // spring year (Calendar::setYearDay).
+  bool triggerSetYearDay() const { return m_triggerSetYearDay; }
+  float requestedYearDay() const { return m_requestYearDay; }
+  void clearSetYearDay() { m_triggerSetYearDay = false; }
+  // Clock ticks per game tick: 1 is real time. Debug-only, so it lives here
+  // rather than in the Calendar.
+  int timeScale() const { return kTimeScales[m_timeScale]; }
+  static constexpr int kTimeScales[] = {1, 10, 60, 240, 1440};
 
   // Both states: a click on the minimap asks to move the player to that
   // tile. The state snaps it to the nearest standable tile.
@@ -114,8 +125,10 @@ private:
   void drawTripSection(Player &player);
   void drawMagicBookSection(Maze &maze);
   void drawMinimapSection(Player &player, Maze &maze);
+  void drawCalendarSection(const Calendar &cal);
+  void drawClimateSection(Player &player, Overworld &world, const Calendar &cal);
   void drawIslandSection(Player &player, Overworld &world);
-  void drawIslandMapSection(Player &player, Overworld &world);
+  void drawIslandMapSection(Player &player, Overworld &world, const Calendar &cal);
   void requestTeleport(int x, int y) {
     m_teleportX = x;
     m_teleportY = y;
@@ -127,8 +140,9 @@ private:
 
   // Redraws the cached god-view minimap, one pixel per cell.
   void generateMap(Maze &maze, const RenderSettings &settings);
-  // One pixel per coarse cell, sampled at its centre tile.
-  void generateIslandMap(const Overworld &world);
+  // One pixel per coarse cell, sampled at its centre tile. The samples are
+  // cached per island; only the colouring is redone when the date moves.
+  void generateIslandMap(const Overworld &world, double yearDay);
 
   // Scoped ImGui theme, so the panel's look does not bleed into any other
   // ImGui window added later.
@@ -150,13 +164,20 @@ private:
   bool m_triggerEndTrip = false;
   bool m_triggerNewIsland = false;
   bool m_triggerRemoveProp = false;
+  bool m_triggerSetYearDay = false;
+  float m_requestYearDay = 0.0f;
+  int m_timeScale = 0; // index into kTimeScales
+
   bool m_triggerTeleport = false;
   int m_teleportX = 0, m_teleportY = 0;
 
   // Island map cache
   Texture2D m_islandTexture{};
   bool m_islandMapDirty = true;
-  int m_islandView = 0; // 0 = biomes, 1 = height
+  int m_islandView = 0; // 0 = biomes and snow, 1 = height, 2 = degrees C
+  std::vector<TileSample> m_islandSamples;
+  uint32_t m_islandSamplesSeed = 0;
+  double m_islandMapYearDay = -1.0; // the date the map was coloured for
 
   // Magic book inspection state
   bool m_pinMagicBook = false;

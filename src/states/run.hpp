@@ -1,6 +1,8 @@
 #pragma once
 
+#include "core/capture.hpp"
 #include "entities/player.hpp"
+#include "world/calendar.hpp"
 #include <ctime>
 
 // ============================================================================
@@ -14,7 +16,11 @@
 //
 // A state places the player in its world with Player::teleport - it never
 // constructs a fresh Player, which would silently wipe the bag on every
-// world change. The day counter joins this struct in Phase 5.
+// world change.
+//
+// The Calendar is the run's one clock (world/calendar.hpp): Day 0 at the
+// start, the score, and the surface's season. Each state advances it one
+// tick per update, so it runs at the same rate in both worlds.
 // ============================================================================
 struct Run {
   // seed 0 means "pick one from the clock". Resolved here, once, so both
@@ -26,4 +32,14 @@ struct Run {
 
   unsigned int seed;
   Player player;
+  Calendar calendar;
+
+  // The clock's half of a state's snapshot - the same in both worlds.
+  void snapshotClock(Telemetry &out) const {
+    out.day = calendar.day();
+    out.season = seasonId(calendar.season());
+    out.dayOfSeason = calendar.dayOfSeason();
+    out.timeOfDay = calendar.timeOfDay();
+    out.yearDay = (float)calendar.yearDay();
+  }
 };

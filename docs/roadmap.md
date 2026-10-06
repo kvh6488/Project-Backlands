@@ -142,15 +142,37 @@ The surface now matches the maze's standard: generated from a seed, rendered on 
 - **Generation pipeline.** Ocean flood → priority-flood depression filling → lakes → D8 drainage and flow accumulation → rivers (cells with enough upstream area, so each ends in a lake or the ocean by construction; this replaced walking from hand-picked sources) → swamps and coastal scrub → distance fields → Whittaker biome lookup. Coarse data reaches tiles only through smooth fields. Spawn is inland on grassland. Props come from per-chunk Bridson Poisson-disc points thinned by biome density; spacing holds across chunk borders. Points are memoised and one chunk is prefetched per tick.
 - **Rendering.** `OverworldRenderer` autotiles on a dual grid (16 corner shapes; the 47-tile blob set moves to Phase 9), blends biomes with a dithered fade shader, and flows water by world position. Props go through the Y-sorted `DrawQueue`, now shared with the maze. The master palette grew to 72 colours (since 77) and the surface sheets are built from four packs by `tools/build_overworld_sheets.py`. Footprints (`StepEffects`) are presentation only.
 - **Tooling and tests.** `OverworldState::snapshot` telemetry, four headless scenarios (walk, wrap seam, coast, coastal scrub), a debug-panel island map with new-seed and remove-prop buttons, and `tests/test_overworld.cpp` covering determinism, spawn, rivers, the open-ocean seam, prop spacing, the change record, prefetch and the renderer's pure parts.
-- **Deferred.** Water is walkable until Phase 9 (no swimming or boat). Full-orange autumn trees wait for Phase 5's seasons. Height has no effect on movement.
+- **Deferred.** Water is walkable until Phase 9 (no swimming or boat). Height has no effect on movement.
 
 **Not in Phase 4:** maze entrances and set pieces, the overworld ↔ maze transition, seasons, weather, survival meters, the day counter.
 
-### Phase 5 — Seasons & the Day Counter
+### Phase 5 (COMPLETE) — Seasons & the Day Counter
 The surface's clock (wilderness §4).
-- **Day counter** — one counter from Day 0 of the run, never resets, never runs at a different rate below. It is the score and the source of every unlock gate. Day/night time-of-day underneath it.
-- **Seasons** — the surface reads the day count cyclically: spring → summer → autumn → winter. A season shifts the temperature field, so the snow line moves and water freezes and thaws.
-- **`seasonalDrift`** — the hidden accumulator that makes seasons run fast while below (wilderness §4.3). Stubbed here; it accrues once Phase 6 connects the worlds.
+
+**The calendar (built).** `Calendar` (`world/calendar.hpp`) lives in `Run` and is one integer: fixed-step ticks since the run began. Day, time of day, season and year day are all derived from it. A day lasts **15 real minutes**; a season is **20 days**, so a year is **80**. A run starts on **Day 0 at 08:00 in mid-spring** (year day 10). That puts Day 20, the earliest a maze entrance can open, in **mid-summer**, and the first winter starts on Day 50. Both states advance the clock one tick per update, so it runs at one rate in both worlds. `seasonalDrift` is a field on the calendar, stubbed at 0 until Phase 6.
+
+**Temperature and snow (built).** Every tile keeps a fixed base temperature t0 (it falls with height, plus broad noise). The season slides one number, the **snow line**, along that scale: `°C = 25 × (t0 − snowLine(yearDay))` plus a ±4 °C daily swing. Snow lies where the daily mean is below 0 °C, on grass, forest and mountain only; wetland, beach and coastal sand never take snow. `Climate` (`world/climate.hpp`) sets the snow line's key values from **this island's own temperature distribution**, so every seed hits the targets:
+
+| Year day | Snow line | Seed 1 |
+|---|---|---|
+| 0 / 60 — start of spring, end of autumn | 70 % of the mountains | 70 % of mountains, 8 % of land |
+| 16 / 44 — late spring, early autumn | the alpine peaks (the generated map) | 2 % of mountains |
+| 20–40 — summer | below the coldest land | none; coast 25 °C at midsummer |
+| 70 — midwinter | the coldest 32 % of land | all mountains, 32 % of land; peaks −12 °C, coast 7.5 °C |
+
+Between knots the line follows a periodic monotone cubic (PCHIP), so it never overshoots a target.
+
+**Snow is cover, not a biome.** `Biome::SNOW` is gone: cold peaks are `MOUNTAIN` with an alpine shade, and the renderer lays snow over whatever ground lies under the snow line today. Chunks never read the date, so props stand on the same tiles all year.
+
+**Trees through the year (built).** A prop's hash picks a **species** once, and the date picks its **look**: in leaf, turning, autumn colour, bare, or snowed under. Each deciduous tree keeps its own leaf calendar: it leafs out on spring days 1–6, turns on year days 41–50, colours 4 days later, and drops its leaves on days 56–62. One tree in five stays green and then drops its leaves without colouring. Evergreens change only under snow: every PC2 pine and fir has a snow-laden frame, drawn by `snow_laden` in `tools/build_overworld_sheets.py` (snow on the top of each bough, the outline untouched). The full-orange autumn frames held back in Phase 4 are live. Bushes follow the same calendar: Pixel Crawler's go olive and then tan or rust, LightBorne's hold green, and every bush stands as a bare shrub all winter. Coastal scrub's trees and bushes stay in leaf all year: the sea keeps the coast mild.
+
+**Ground (built).** Spring adds flowers to grassland, coastal scrub and wetland on a bell curve that peaks mid-spring. From mid-autumn, flowers wither to brown tufts. Snowed tiles take snow decals, and footprints follow the snow.
+
+**Ice (built).** Water freezes under the same snow line: lakes anywhere, rivers only where the land they run through is mountain (moving water freezes last), and swamps and the sea never. A lake's shallows are colder than its middle, so it freezes from the shore in. Ice is one more fade over the water (`ow_ice.png`, a 16-tile square generated by `ice_sheet` in `tools/build_overworld_sheets.py`), so it ends ragged against open water, and frozen tiles lose their glints. It is presentation only for now: water is walkable whether frozen or not until Phase 9 adds swimming.
+
+**Tooling (built).** The debug panel has a calendar (day, season, time, a year slider that scrubs the clock from day 1 of summer to the end of spring, buttons that jump to each season's peak, and a ×1–×1440 clock speed). It also has a climate section: °C, snow and ice at the player, and the share of land under snow. The island map gains a snow and ice overlay and a °C view. The command line takes `--day N`, scenarios take `day N [hour]`, and telemetry carries the clock plus °C and snow at the player. `tests/test_seasons.cpp` covers the calendar, the climate targets, ice and the leaf year; `scenarios/overworld_seasons.txt`, `overworld_snowline.txt` and `overworld_ice.txt` are the visual checks.
+
+**Deferred:** the player-facing HUD clock moves to Phase 13's HUD pass; ice bearing weight comes with swimming in Phase 9.
 
 ### Phase 5.5 — Pre-Connection Refactor
 Structural work that Phase 6 depends on, from the 06-10-2026 architecture review. No new gameplay.
@@ -244,7 +266,7 @@ Now a third layer below the maze.
 ### Phase 13 — GUI, Graphical Polish & Licensing
 *(Finalisation — most should be completed already.)*
 - Final tile textures and sprite art (player, mobs, items, UI icons) for both worlds; maybe carpet bitmasking, ritual candles and lighting spawns in the maze.
-- HUD design (health, meters, inventory bar, day counter, menus, text pop-ups), consistent across both worlds.
+- HUD design (health, meters, inventory bar, day counter, menus, text pop-ups), consistent across both worlds. Includes the player-facing clock (day, season, time), deferred from Phase 5.
 - Screen distortion effects (VHS aesthetic) below.
 - Audio polish: ambient buzz, flickering lights, disturbing messages, mechanical maze shifting sounds, hallucination triggers, cryptic clues; surface ambience per biome and season.
 - Micro-animations and visual feedback (damage, pickups, cure spreading).
@@ -354,7 +376,8 @@ These are **starting points, not final decisions** — each will be researched a
 | **Hybrid Procedural Generation** | BSP ($O(R \log R)$) for office rooms + Prim's ($O(V \log V)$) for highly-branched spanning tree corridors + Loop Injection + Connected Component Pruning (identifying and stripping dead-end alcoves). | Maze layout |
 | **Falloff Island Mask** | Land score = noise − falloff(distance from centre), thresholded. The score doubles as height: mountains in the middle, coast where it crosses the threshold, islets for free. | Overworld island shape and height |
 | **Downhill Drainage & Priority-Flood** | Rivers walk to their lowest neighbour; pits are filled into lakes that overflow at their lowest rim, so every river ends at a lake or the ocean. | Rivers and lakes |
-| **Whittaker Biome Lookup** | A 2D table: temperature × moisture → biome. Temperature falls with height, so snowy peaks need no special case. | Overworld biomes |
+| **Whittaker Biome Lookup** | A 2D table: temperature × moisture → biome. Temperature falls with height, so alpine peaks need no special case. | Overworld biomes |
+| **Quantile-Calibrated Season Curve** | Snow-line key values read off the island's empirical temperature CDF (a sorted sample), joined by a periodic monotone cubic (PCHIP, Fritsch–Butland slopes) that cannot overshoot. | Seasonal snow line and °C |
 | **Poisson-Disc Sampling (Bridson)** | Random placement with a guaranteed minimum spacing (blue noise), O(n). Chunk-boundary aware by regenerating neighbours' points. | Trees, rocks, resources, set pieces |
 | **Doorway Node Graphs** | Pre-spawned doors isolate rooms and corridors, abstracting the cellular grid into a graph of connected sectors. | Faster pathfinding, localized radiation spread |
 | **Mathematical Shuffling** | (TBD) Permutation groups or linear congruential generators to predictably shuffle the Level 2 room order based on the day index. | Level 2 room logic |

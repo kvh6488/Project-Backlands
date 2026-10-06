@@ -50,9 +50,10 @@ void StepEffects::loadTextures() {
   m_sheet = assets::loadTexture("assets/ow_steps.png", "StepEffects");
 }
 
-StepEffects::Mark StepEffects::markFor(Biome ground, uint8_t shade) {
+StepEffects::Mark StepEffects::markFor(Biome ground, uint8_t shade, bool snow) {
+  if (snow)
+    return Mark::PRINT;
   switch (ground) {
-  case Biome::SNOW: return Mark::PRINT;
   case Biome::WETLAND: return Mark::SQUISH;
   case Biome::BEACH: return Mark::KICK;
   case Biome::COASTAL: return shade == 1 ? Mark::KICK : Mark::KICK_PALE; // 1 = sand patch
@@ -61,7 +62,7 @@ StepEffects::Mark StepEffects::markFor(Biome ground, uint8_t shade) {
 }
 
 void StepEffects::update(const Overworld &world, const Player &player, bool footfall,
-                         float dt) {
+                         float dt, const Calendar &cal) {
   advance(dt);
   const Vector2 pos = player.getPosition();
   if (!footfall || (m_stepped && std::hypot(pos.x - m_lastStep.x, pos.y - m_lastStep.y) < kMinStepPx))
@@ -80,7 +81,8 @@ void StepEffects::update(const Overworld &world, const Player &player, bool foot
     foot.x += side * kFootSpread;
   foot = {snapToArt(foot.x), snapToArt(foot.y)};
   const int fx = world.toGridX(foot.x), fy = world.toGridY(foot.y);
-  leave(markFor(world.biomeAt(fx, fy), world.shadeAt(fx, fy)), foot, facing,
+  leave(markFor(world.biomeAt(fx, fy), world.shadeAt(fx, fy), world.snowAt(fx, fy, cal)),
+        foot, facing,
         (int)std::floor(pos.y + kSole) + 1);
 }
 

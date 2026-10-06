@@ -102,6 +102,7 @@ void MazeState::onExit() {
 }
 
 void MazeState::update(float dt, const InputState &in) {
+  m_run.calendar.advance(); // the day counter runs below at the same rate
   if (in.toggleFullscreen) {
     ToggleFullscreen();
   }
@@ -653,6 +654,7 @@ void MazeState::render(const InputState &in) {
 }
 
 void MazeState::snapshot(Telemetry &out) const {
+  m_run.snapshotClock(out);
   const Vector2 pos = m_player.getPosition();
   out.playerWorldPos = pos;
   out.playerCellX = m_maze.toGridX(pos.x);

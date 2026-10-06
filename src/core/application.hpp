@@ -28,6 +28,10 @@ struct AppConfig {
   // `spawn` line, never by the shipping game.
   bool hasSpawnOverride = false;
   int spawnX = 0, spawnY = 0;
+  // Start the clock on this run day and hour instead of Day 0. Set by --day
+  // or a scenario's `day` line; -1 = the shipping start.
+  int startDay = -1;
+  float startHour = (float)Calendar::kStartHour;
 
   // Hidden window, no frame pacing, no ImGui. Ticks run flat out.
   bool headless = false;

@@ -65,6 +65,8 @@ What differs between the two worlds is **what each system does with that number*
 ### 4.1 The Overworld Reading (cyclical)
 The surface reads the day count **cyclically** — day within the year, wrapping. Seasons wheel: spring → summer → autumn → winter → spring. Drives temperature, animal populations, plant availability, water (melt/freeze/flood), and which entrances are open. It is predictable and it repeats. You can learn it and plan against it.
 
+**The numbers (decided 06-10-2026).** A day is 15 real minutes; a season is 20 days; the year is 80. A run starts in mid-spring, so the Day 20 entrance gate falls in mid-summer and the first winter begins on Day 50. Snow is laid by temperature alone: none in summer, the alpine peaks in late spring and early autumn, 70 % of the mountains at the turn of winter, and in midwinter the coldest third of the island — out over the grass and forest of the interior, but never on wetland or sand.
+
 ### 4.2 The Underworld Reading (monotonic, three stages)
 
 Maze difficulty is **not** read off the run's day count. It is anchored to **player events**, and it escalates in three distinct stages:

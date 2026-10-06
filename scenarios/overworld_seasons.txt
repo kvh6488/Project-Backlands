@@ -1,0 +1,14 @@
+# One place through the year. No `day` line, so run it with --day N to pick
+# the date (--day 0 mid-spring, 20 midsummer, 42 peak autumn, 60 midwinter).
+# Seed 1's spawn sits on the midwinter snow edge, with woods to the east, so
+# both the snow and the deciduous trees are in view.
+seed 1
+world overworld
+window 1280 720
+scale 1.5
+
+checkpoint spawn
+
+hold D 180                  # ~12 tiles east, into the woods
+checkpoint woods
+end

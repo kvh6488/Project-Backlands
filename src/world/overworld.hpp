@@ -1,5 +1,7 @@
 #pragma once
 
+#include "world/calendar.hpp"
+#include "world/climate.hpp"
 #include "world/generators/poisson.hpp"
 #include "world/island.hpp"
 #include "world/world.hpp"
@@ -68,6 +70,11 @@ struct Prop {
 // prefetchAround builds the ring just outside the view one chunk per tick
 // ahead of the player: a border crossing finds its chunks already there
 // instead of building two or three inside one frame.
+//
+// SEASONS. Nothing in a chunk depends on the date. A chunk keeps each tile's
+// base temperature, and the Climate turns that plus a Calendar into degrees
+// and snow on the fly - so a chunk built in summer is still right in winter,
+// and every tree stands on the same tile all year.
 // ============================================================================
 class Overworld final : public World {
 public:
@@ -81,6 +88,7 @@ public:
   static constexpr int kSpawnClearance = 2;
 
   const Island &island() const { return m_island; }
+  const Climate &climate() const { return m_climate; }
   int spawnX() const { return m_island.spawnX(); }
   int spawnY() const { return m_island.spawnY(); }
 
@@ -90,6 +98,14 @@ public:
   float heightAt(int x, int y) const;
   uint8_t shadeAt(int x, int y) const; // TileSample::shade
   uint8_t flowAt(int x, int y) const;  // TileSample::flow
+  uint8_t driftAt(int x, int y) const; // TileSample::drift
+  float temperatureAt(int x, int y) const; // base t0, season-free
+
+  // The season's view of a tile, from the Climate: degrees C now (the daily
+  // swing included), whether snow lies there, and whether its water is ice.
+  float celsiusAt(int x, int y, const Calendar &cal) const;
+  bool snowAt(int x, int y, const Calendar &cal) const;
+  bool frozenAt(int x, int y, const Calendar &cal) const;
   PropType propAt(int x, int y) const;
   // The full record of the prop on a tile, or null. Valid until its chunk is
   // evicted by retainAround - read it, do not keep it.
@@ -138,6 +154,8 @@ private:
     std::array<float, kChunk * kChunk> height;
     std::array<uint8_t, kChunk * kChunk> shade;
     std::array<uint8_t, kChunk * kChunk> flow;
+    std::array<uint8_t, kChunk * kChunk> drift;
+    std::array<float, kChunk * kChunk> temperature;
     std::array<int16_t, kChunk * kChunk> propIndex; // into props, or -1
     std::vector<Prop> props;
   };
@@ -151,6 +169,7 @@ private:
   PropType rollProp(Biome b, uint8_t shade, int x, int y, uint8_t &variant) const;
 
   Island m_island;
+  Climate m_climate;
   int m_chunksAcross;
 
   // A cache: filling it on a const query does not change what the world IS,

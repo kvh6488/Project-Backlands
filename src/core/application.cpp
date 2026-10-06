@@ -25,6 +25,11 @@ Application::Application(const AppConfig &config)
   debuglog::log("SEED", "%u  (%s)", m_run.seed,
                 config.seedNote ? config.seedNote : "unspecified");
   debuglog::log("SEED", "reproduce with:  Backlands.exe --seed %u", m_run.seed);
+  if (config.startDay >= 0) {
+    m_run.calendar.setDay(config.startDay, config.startHour);
+    debuglog::log("DEV", "clock starts on Day %d, %s", m_run.calendar.day(),
+                  seasonId(m_run.calendar.season()));
+  }
   if (m_debugOverlay.isVisible()) {
     debuglog::log("DEV", "debug tools armed  (F1 toggles the panel)");
   }

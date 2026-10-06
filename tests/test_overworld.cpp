@@ -8,6 +8,7 @@
 #include "world/overworld.hpp"
 #include "world/shoreline.hpp"
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <cmath>
 #include <memory>
 
@@ -601,78 +602,95 @@ TEST(OverworldRendererTest, CornerMaskBitsAreTlTrBlBr) {
   EXPECT_EQ(OverworldRenderer::cornerMask(true, true, true, true), 15);
 }
 
+// In every look, too: a species missing a frame for one season would vanish
+// for that season.
 TEST(OverworldRendererTest, EveryPropKindHasASpriteInEveryLandBiome) {
+  using Look = OverworldRenderer::Look;
   for (PropType t : {PropType::TREE, PropType::PINE, PropType::BUSH,
                      PropType::ROCK, PropType::REEDS})
     for (int b = (int)Biome::BEACH; b < (int)Biome::COUNT; ++b)
-      for (int v = 0; v < 256; ++v)
-        ASSERT_LT(OverworldRenderer::spriteFor(t, (Biome)b, (uint8_t)v),
-                  owsprite::COUNT)
-            << propId(t) << " in " << biomeId((Biome)b);
-  EXPECT_EQ(OverworldRenderer::spriteFor(PropType::NONE, Biome::FOREST, 0),
+      for (uint8_t shade = 0; shade < 4; ++shade)
+        for (int look = 0; look < (int)Look::COUNT; ++look)
+          for (int v = 0; v < 256; ++v)
+            ASSERT_LT(OverworldRenderer::spriteFor(t, (Biome)b, shade, (uint8_t)v, (Look)look),
+                      owsprite::COUNT)
+                << propId(t) << " in " << biomeId((Biome)b);
+  EXPECT_EQ(OverworldRenderer::spriteFor(PropType::NONE, Biome::FOREST, 0, 0),
             owsprite::COUNT);
 }
 
 TEST(OverworldRendererTest, SpeciesFollowTheBiome) {
   using namespace owsprite;
   for (int v = 0; v < 256; ++v) {
-    Id palm = OverworldRenderer::spriteFor(PropType::TREE, Biome::BEACH, (uint8_t)v);
+    Id palm = OverworldRenderer::spriteFor(PropType::TREE, Biome::BEACH, 0, (uint8_t)v);
     EXPECT_TRUE(palm == PALM_TALL || palm == PALM_SHORT);
-    Id willow = OverworldRenderer::spriteFor(PropType::TREE, Biome::WETLAND, (uint8_t)v);
+    Id willow = OverworldRenderer::spriteFor(PropType::TREE, Biome::WETLAND, 0, (uint8_t)v);
     EXPECT_TRUE(willow >= WILLOW && willow <= WILLOW_S_C);
     // Coastal scrub keeps its trees short; palms grow nowhere else.
-    Id scrub = OverworldRenderer::spriteFor(PropType::TREE, Biome::COASTAL, (uint8_t)v);
+    Id scrub = OverworldRenderer::spriteFor(PropType::TREE, Biome::COASTAL, 0, (uint8_t)v);
     EXPECT_LE(kFrames[scrub].h, 7) << v;
-    for (Biome b : {Biome::GRASSLAND, Biome::FOREST, Biome::WETLAND, Biome::MOUNTAIN, Biome::SNOW})
-      for (PropType t : {PropType::TREE, PropType::PINE, PropType::BUSH}) {
-        Id id = OverworldRenderer::spriteFor(t, b, (uint8_t)v);
-        EXPECT_TRUE(id != PALM_TALL && id != PALM_SHORT) << biomeId(b);
-      }
+    for (Biome b : {Biome::GRASSLAND, Biome::FOREST, Biome::WETLAND, Biome::MOUNTAIN})
+      for (uint8_t shade = 0; shade < 4; ++shade)
+        for (PropType t : {PropType::TREE, PropType::PINE, PropType::BUSH}) {
+          Id id = OverworldRenderer::spriteFor(t, b, shade, (uint8_t)v);
+          EXPECT_TRUE(id != PALM_TALL && id != PALM_SHORT) << biomeId(b);
+        }
   }
   int palms = 0;
   for (int v = 0; v < 256; ++v) {
-    Id scrub = OverworldRenderer::spriteFor(PropType::TREE, Biome::COASTAL, (uint8_t)v);
+    Id scrub = OverworldRenderer::spriteFor(PropType::TREE, Biome::COASTAL, 0, (uint8_t)v);
     palms += scrub == PALM_TALL || scrub == PALM_SHORT;
   }
   EXPECT_GT(palms, 256 / 4); // the commonest tree there
 }
 
-// Full-orange autumn waits for Phase 5's seasons; only the light-brown
-// autumn trees may appear now.
-TEST(OverworldRendererTest, FullOrangeAutumnTreesAreHeldBack) {
+// Autumn colour is a look, never a species: in leaf, no tree is orange or
+// tan, and every deciduous tree has a full-colour frame to turn to.
+TEST(OverworldRendererTest, AutumnColourIsOnlyEverALook) {
   using namespace owsprite;
-  const Id heldBack[] = {OAK_AUTUMN_A,   OAK_AUTUMN_B,   BIRCH_AUTUMN_A,
-                         BIRCH_AUTUMN_B, PC1_S2_ORANGE,  PC1_S3_ORANGE,
-                         PC1_S4_ORANGE,  PC1_S5_ORANGE,  PC1_S2_AMBER,
-                         PC1_S3_AMBER,   PC1_S4_AMBER,   PC1_S5_AMBER,
-                         PC3_S2_RUST,    PC3_S3_RUST,    PC3_S4_RUST,
-                         PC3_S5_RUST};
+  using Look = OverworldRenderer::Look;
+  const Id autumnal[] = {OAK_AUTUMN_A,  OAK_AUTUMN_B,  BIRCH_AUTUMN_A, BIRCH_AUTUMN_B,
+                         PC1_S2_ORANGE, PC1_S3_ORANGE, PC1_S4_ORANGE,  PC1_S5_ORANGE,
+                         PC1_S2_AMBER,  PC1_S3_AMBER,  PC1_S4_AMBER,   PC1_S5_AMBER,
+                         PC3_S2_RUST,   PC3_S3_RUST,   PC3_S4_RUST,    PC3_S5_RUST,
+                         PC1_S2_TAN,    PC1_S3_TAN,    PC1_S4_TAN,     PC1_S5_TAN,
+                         PC3_S2_TAN,    PC3_S3_TAN,    PC3_S4_TAN,     PC3_S5_TAN};
   for (PropType t : {PropType::TREE, PropType::PINE})
     for (int b = (int)Biome::BEACH; b < (int)Biome::COUNT; ++b)
-      for (int v = 0; v < 256; ++v) {
-        Id id = OverworldRenderer::spriteFor(t, (Biome)b, (uint8_t)v);
-        for (Id h : heldBack)
-          ASSERT_NE(id, h) << biomeId((Biome)b);
-      }
+      for (uint8_t shade = 0; shade < 4; ++shade)
+        for (int v = 0; v < 256; ++v) {
+          Id green = OverworldRenderer::spriteFor(t, (Biome)b, shade, (uint8_t)v, Look::IN_LEAF);
+          for (Id a : autumnal)
+            ASSERT_NE(green, a) << biomeId((Biome)b);
+          if (!OverworldRenderer::isDeciduous(t, (Biome)b, shade, (uint8_t)v))
+            continue;
+          Id autumn = OverworldRenderer::spriteFor(t, (Biome)b, shade, (uint8_t)v, Look::AUTUMN);
+          EXPECT_NE(std::find(std::begin(autumnal), std::end(autumnal), autumn),
+                    std::end(autumnal));
+        }
 }
 
+// Through the year, snowed or not: even spring's bloom keeps it under ~30 %.
 TEST(OverworldRendererTest, GroundDetailsAreFlatDecalsAtAModestDensity) {
-  for (int b = 0; b < (int)Biome::COUNT; ++b) {
-    for (uint8_t shade = 0; shade < 4; ++shade) {
-      int shown = 0;
-      for (uint32_t h = 0; h < 4000; ++h) {
-        owsprite::Id id = OverworldRenderer::decalFor((Biome)b, shade, noise::hash(h, b, 9));
-        if (id == owsprite::COUNT)
-          continue;
-        ++shown;
-        // Flat: one tile tall, so drawing under the props is never wrong.
-        EXPECT_EQ(owsprite::kFrames[id].h, 1);
-        EXPECT_GE(id, owsprite::DECAL_FLOWERS_A); // decals only, no props
+  for (double day : {5.0, 11.0, 30.0, 50.0, 70.0})
+    for (bool snow : {false, true})
+      for (int b = 0; b < (int)Biome::COUNT; ++b) {
+        for (uint8_t shade = 0; shade < 4; ++shade) {
+          int shown = 0;
+          for (uint32_t h = 0; h < 4000; ++h) {
+            owsprite::Id id =
+                OverworldRenderer::decalFor((Biome)b, shade, snow, noise::hash(h, b, 9), day);
+            if (id == owsprite::COUNT)
+              continue;
+            ++shown;
+            // Flat: one tile tall, so drawing under the props is never wrong.
+            EXPECT_EQ(owsprite::kFrames[id].h, 1);
+            EXPECT_GE(id, owsprite::DECAL_FLOWERS_A); // decals only, no props
+          }
+          EXPECT_LT(shown, 4000 * 3 / 10) << biomeId((Biome)b) << " on day " << day;
+        }
       }
-      EXPECT_LT(shown, 4000 / 5) << biomeId((Biome)b); // at most ~20% of tiles
-    }
-  }
-  EXPECT_EQ(OverworldRenderer::decalFor(Biome::OCEAN, 0, 0), owsprite::COUNT);
+  EXPECT_EQ(OverworldRenderer::decalFor(Biome::OCEAN, 0, false, 0, 11.0), owsprite::COUNT);
 }
 
 // A 12 x 5 grid split at x = 6: `in` to the left.
@@ -745,8 +763,10 @@ TEST(OverworldRendererTest, SpriteFramesDoNotOverlapInTheAtlas) {
 // StepEffects and the footfall that drives them (no window, no textures)
 // ---------------------------------------------------------------------------
 namespace {
-// The tile nearest spawn (on a coarse lattice) whose 5 x 5 block is `want`.
-bool findBlockOf(const Overworld &w, Biome want, int &tx, int &ty) {
+// The tile nearest spawn (on a coarse lattice) whose 5 x 5 block all passes
+// `want(x, y)`.
+template <typename Want>
+bool findBlockWhere(const Overworld &w, Want want, int &tx, int &ty) {
   for (int r = 0; r < 1200; r += 8)
     for (int dy = -r; dy <= r; dy += 8)
       for (int dx = -r; dx <= r; dx += 8) {
@@ -756,7 +776,7 @@ bool findBlockOf(const Overworld &w, Biome want, int &tx, int &ty) {
         bool all = true;
         for (int j = -2; j <= 2 && all; ++j)
           for (int i = -2; i <= 2 && all; ++i)
-            all = w.biomeAt(x + i, y + j) == want;
+            all = want(x + i, y + j);
         if (all) {
           tx = x;
           ty = y;
@@ -768,7 +788,8 @@ bool findBlockOf(const Overworld &w, Biome want, int &tx, int &ty) {
 } // namespace
 
 TEST(StepEffectsTest, SnowTakesPrintsWetlandSquishesSandKicksTheRestNothing) {
-  EXPECT_EQ(StepEffects::markFor(Biome::SNOW), StepEffects::Mark::PRINT);
+  EXPECT_EQ(StepEffects::markFor(Biome::MOUNTAIN, 0, true), StepEffects::Mark::PRINT);
+  EXPECT_EQ(StepEffects::markFor(Biome::GRASSLAND, 0, true), StepEffects::Mark::PRINT);
   EXPECT_EQ(StepEffects::markFor(Biome::WETLAND), StepEffects::Mark::SQUISH);
   EXPECT_EQ(StepEffects::markFor(Biome::BEACH), StepEffects::Mark::KICK);
   EXPECT_EQ(StepEffects::markFor(Biome::COASTAL, 1), StepEffects::Mark::KICK); // sand patch
@@ -803,21 +824,24 @@ TEST(StepEffectsTest, TheRingKeepsTheNewestMarks) {
 
 // Through update(): the world under the foot picks the mark, and a footfall
 // that has not moved since the last one (walking into a tree) leaves none.
+// Midwinter, so the snow reaches far enough down to find a block of it.
 TEST(StepEffectsTest, FootfallsInSnowLeavePrintsButNotOnTheSpot) {
   const Overworld &w = sharedWorld();
+  Calendar cal;
+  cal.setDay(60, 12.0f);
   int tx, ty;
-  ASSERT_TRUE(findBlockOf(w, Biome::SNOW, tx, ty));
+  ASSERT_TRUE(findBlockWhere(w, [&](int x, int y) { return w.snowAt(x, y, cal); }, tx, ty));
   const float cell = (float)w.getCellSize();
   Player player({tx * cell + cell / 2.0f, ty * cell}, AreaState::ROOM);
   StepEffects fx;
-  fx.update(w, player, false, 0.1f);
+  fx.update(w, player, false, 0.1f, cal);
   EXPECT_EQ(fx.liveCount(), 0) << "no footfall, no print";
-  fx.update(w, player, true, 0.1f);
+  fx.update(w, player, true, 0.1f, cal);
   EXPECT_EQ(fx.liveCount(), 1);
-  fx.update(w, player, true, 0.1f);
+  fx.update(w, player, true, 0.1f, cal);
   EXPECT_EQ(fx.liveCount(), 1) << "stood still: no second print";
   player.teleport({player.getPosition().x, player.getPosition().y + 20.0f}, AreaState::ROOM);
-  fx.update(w, player, true, 0.1f);
+  fx.update(w, player, true, 0.1f, cal);
   EXPECT_EQ(fx.liveCount(), 2);
 }
 

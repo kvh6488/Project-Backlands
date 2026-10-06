@@ -2,7 +2,7 @@
 
 // ============================================================================
 // ow_fade - one fade material (swamp water, wetland, gravel, snow, drift,
-// dune sand)
+// dune sand, ice)
 // drawn pixel by pixel over the view. OverworldRenderer::drawFade.
 //
 // SWAMP WATER (layer 0) is drawn in passes, one per tint `level` (1 faint ..
@@ -11,6 +11,10 @@
 // k-th quarter of it, under the same clumpy threshold as the land fades.
 // Every pass shares that threshold, so a darker tint never draws where a
 // fainter one did not.
+//
+// ICE (layer 6) is one pass over the water: its weight is the frozen share of
+// the water around a cell, so it ends between a frozen cell and an open one,
+// broken up by the same clumpy threshold. Ice holds still: no sway.
 // ============================================================================
 // COVERAGE. `weights` / `info` hold, per cell, the share of nearby cells that
 // are this material. Sampled bilinear, that is a smooth 0..1 ramp across a
@@ -33,12 +37,13 @@ in vec4 fragColor;
 
 uniform sampler2D texture0; // assets/ow_fades.png
 uniform sampler2D weights;  // per cell: wetland, gravel, snow, drift
-uniform sampler2D info;     // per cell: r = land (grass) flag, g = swamp depth 0..1, b = dune sand
+uniform sampler2D info;     // per cell: r = land (grass) flag, g = swamp depth 0..1, b = dune sand, a = ice
 uniform sampler2D swampWater; // assets/ow_swamp_water.png: a tiling square per level
+uniform sampler2D ice;      // assets/ow_ice.png: one tiling square
 uniform int level;          // swamp water's tint pass, 1..4
 uniform ivec2 sway;         // the still water's offset now, art px
 uniform ivec2 cellOrigin;   // world cell of texel (0, 0) in weights and info
-uniform int layer;          // the sheet row: 0 swamp, 1 wetland, 2 gravel, 3 snow, 4 drift, 5 dune
+uniform int layer;          // the sheet row: 0 swamp, 1 wetland, 2 gravel, 3 snow, 4 drift, 5 dune; 6 ice (no row)
 
 out vec4 finalColor;
 
@@ -101,6 +106,16 @@ void main() {
     int side = textureSize(swampWater, 0).x; // the squares are stacked down the sheet
     ivec2 at = ivec2(mod(vec2(px + sway), float(side))); // GLSL % is undefined below 0
     finalColor = vec4(texelFetch(swampWater, at + ivec2(0, (level - 1) * side), 0).rgb, 1.0);
+    return;
+  }
+  if (layer == 6) {
+    float w = texture(info, uv).a;
+    float n = 0.12 * (2.0 * valueNoise(art / 6.0, 0x1ce5u) - 1.0);
+    float c = clamp(w + n * 4.0 * w * (1.0 - w), 0.0, 1.0);
+    if (c <= clumpyThreshold(px, 0x1ce5u))
+      discard;
+    int side = textureSize(ice, 0).x;
+    finalColor = vec4(texelFetch(ice, ivec2(mod(vec2(px), float(side))), 0).rgb, 1.0);
     return;
   }
 

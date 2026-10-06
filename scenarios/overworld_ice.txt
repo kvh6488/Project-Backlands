@@ -1,0 +1,13 @@
+# A lake in seed 1's cold heart on run day 52 (year day 62, early winter):
+# the shallows frozen, open water still in the middle. With --day 60 (and the
+# day line dropped) it is frozen over. A mountain river that freezes runs
+# through tile (1856, 1664).
+seed 1
+world overworld
+spawn 1880 1500
+day 52
+window 1280 720
+scale 1.5
+
+checkpoint ice
+end

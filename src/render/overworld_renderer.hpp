@@ -59,10 +59,19 @@
 // GROUND DETAILS (flowers, tufts, pebbles, ice) are render-only: a tile's
 // hash picks one from a per-biome pool, drawn flat with the terrain.
 //
+// SEASONS are presentation over a fixed world. Snow is a fade layer like the
+// rest, laid wherever the Climate says it lies today - over grass, forest or
+// rock alike - with drifts where the tile's drift bit is set. Water under
+// the same line freezes (lakes anywhere, rivers only in the mountains): ice
+// is one more fade, drawn over the water from its own texture, unswayed and
+// unflowing, and the glints go. Trees keep
+// their species all year and swap frames (Look): green, turning, autumn
+// colour, bare, or snowed under. Spring adds flowers.
+//
 // PROPS: the world says what grows on a tile (TREE, PINE, ...) and a hash
 // byte; this renderer decides which picture. A per-(kind, biome) weighted
-// pool turns the byte into a sprite, so a TREE is a willow in the wetland and
-// a palm on the beach. Species moves into the world when gameplay needs to
+// pool turns the byte into a species, so a TREE is a willow in the wetland and
+// a palm on the beach, and the date turns the species into a frame. Species moves into the world when gameplay needs to
 // tell trees apart (wood types).
 //
 // Wrap-aware: the camera works in unwrapped world pixels and every Overworld
@@ -108,25 +117,42 @@ public:
                          const std::vector<uint8_t> &swamp, int w, int h,
                          std::vector<float> &out);
 
-  // The sprite a prop draws as. Pure: same prop, same sprite.
-  static owsprite::Id spriteFor(PropType type, Biome biome, uint8_t variant);
-  // The ground detail (a DECAL_* sprite) on a tile with this biome, shade
-  // and hash, or COUNT for none. Pure, like spriteFor.
-  static owsprite::Id decalFor(Biome biome, uint8_t shade, uint32_t hash);
+  // What the date does to a prop. Only trees change; a rock has one look.
+  enum class Look : uint8_t { IN_LEAF, TURNING, AUTUMN, BARE, SNOWED, COUNT };
+
+  // The sprite a prop draws as. The species comes from (type, biome, shade,
+  // variant) alone, so it is the same all year; `look` picks its frame.
+  // Pure: same prop, same look, same sprite.
+  static owsprite::Id spriteFor(PropType type, Biome biome, uint8_t shade,
+                                uint8_t variant, Look look = Look::IN_LEAF);
+  static bool isDeciduous(PropType type, Biome biome, uint8_t shade, uint8_t variant);
+  // A tree's look on `yearDay` (Calendar::yearDay). Snow lying on its tile
+  // wins; otherwise a deciduous tree follows its own leaf calendar, drawn
+  // from `hash` (see "the deciduous year" in the .cpp). Pure.
+  static Look leafLook(bool deciduous, double yearDay, bool snow, uint32_t hash);
+
+  // The ground detail (a DECAL_* sprite) on a tile, or COUNT for none.
+  // Snow swaps the pool; spring adds flowers to grass, scrub and wetland,
+  // and from mid-autumn flowers wither to tufts. Pure, like spriteFor.
+  static owsprite::Id decalFor(Biome biome, uint8_t shade, bool snow,
+                               uint32_t hash, double yearDay);
+  // Spring's flowering, 0..1: a bell over spring peaking at mid-spring.
+  static float bloomAt(double yearDay);
 
   // Props are rooted on their base tile and grow up, so a tall tree rooted
   // below the screen can still reach into view: collect() scans this many
   // rows past the bottom, and the DrawQueue's range must include them.
   static constexpr int kReachBelowTiles = owsprite::kTallestTiles;
 
-  // `time` drives the coast's foam animation (seconds, fixed-step).
+  // `time` drives the coast's foam animation (seconds, fixed-step); `cal`
+  // decides where snow lies and which ground details are out.
   void renderTerrain(const Overworld &world, const Camera2D &camera,
-                     const Viewport &canvas, float time);
+                     const Viewport &canvas, float time, const Calendar &cal);
 
-  // Queues every prop the camera can see, rooted on its tile. Binds `world`
-  // until the queue is flushed.
+  // Queues every prop the camera can see, rooted on its tile, in its look
+  // for `cal`'s date. Binds `world` until the queue is flushed.
   void collect(const Overworld &world, const Camera2D &camera,
-               const Viewport &canvas, DrawQueue &queue);
+               const Viewport &canvas, const Calendar &cal, DrawQueue &queue);
 
   // Drawer: the prop on tile (x, y), unwrapped coordinates.
   void drawQueued(int x, int y) const override;
@@ -142,6 +168,9 @@ private:
     uint8_t shade;
     uint8_t flow;
     uint8_t bank; // 0 far from a beach; up to kBankSteps nearer - the paler bank rows
+    bool snow;    // snow lies here today (Climate)
+    uint8_t drift;
+    bool ice;     // frozen water today (Climate::frozen)
   };
 
   void drawLayer(int layer, int x0, int y0, int w, int h, int frame) const;
@@ -155,20 +184,24 @@ private:
     return m_cells[(y - m_cellsY0) * m_cellsW + (x - m_cellsX0)];
   }
 
-  Texture2D m_water{}, m_river{}, m_swampWater{}, m_glints{}, m_coast{}, m_terrain{},
+  Texture2D m_water{}, m_river{}, m_swampWater{}, m_ice{}, m_glints{}, m_coast{}, m_terrain{},
       m_shades{}, m_fades{}, m_props{}, m_propsWet{};
   Shader m_fade{};
   int m_locWeights = -1, m_locInfo = -1, m_locOrigin = -1, m_locLayer = -1,
-      m_locSwampWater = -1, m_locSway = -1, m_locLevel = -1;
+      m_locSwampWater = -1, m_locIce = -1, m_locSway = -1, m_locLevel = -1;
   // The fade shader's per-cell data, rebuilt per frame: textures, their
   // pixels, the world cell of texel (0, 0), and which fades are in view.
   Texture2D m_weights{}, m_info{};
   std::vector<Color> m_weightPx, m_infoPx;
   int m_fadeX0 = 0, m_fadeY0 = 0;
-  bool m_fadeUsed[6] = {};
+  bool m_fadeUsed[7] = {};
   const Overworld *m_world = nullptr;
   Vector2 m_focus{};
   float m_time = 0.0f; // renderTerrain's, for the lapping roots, glints and sway
+  // The date, read once per frame: a tile is snowed when it takes snow and
+  // its base temperature is under the snow line.
+  double m_yearDay = 0.0;
+  float m_snowLine = 0.0f;
   // The cells around the view, kCacheMargin past it on every side, rebuilt
   // per frame so the layers' lookups are array reads rather than chunk
   // queries. The dual grid reads 1 cell past the view, and from there a fade

@@ -91,6 +91,15 @@ public:
     j.field("seed", m_seed);
     j.field("world", t.world);
 
+    j.key("clock");
+    j.beginObject();
+    j.field("day", t.day);
+    j.field("season", t.season);
+    j.field("dayOfSeason", t.dayOfSeason);
+    j.field("timeOfDay", t.timeOfDay);
+    j.field("yearDay", t.yearDay);
+    j.endObject();
+
     j.key("player");
     j.beginObject();
     j.key("worldPos");
@@ -174,6 +183,8 @@ public:
       j.endArray();
       j.field("height", t.height);
       j.field("biome", t.biome);
+      j.field("celsius", t.celsius);
+      j.field("snow", t.snow);
       j.key("spawn");
       j.beginArray(true);
       j.value(t.spawnX);

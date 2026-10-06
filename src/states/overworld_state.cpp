@@ -67,6 +67,13 @@ void OverworldState::updateCamera() {
 }
 
 void OverworldState::update(float dt, const InputState &in) {
+  // The run's clock; the debug panel can run it faster or jump it.
+  m_run.calendar.advance(m_debugOverlay.timeScale());
+  if (m_debugOverlay.triggerSetYearDay()) {
+    m_debugOverlay.clearSetYearDay();
+    m_run.calendar.setYearDay(m_debugOverlay.requestedYearDay());
+  }
+
   if (in.toggleFullscreen) {
     ToggleFullscreen();
   }
@@ -113,7 +120,8 @@ void OverworldState::update(float dt, const InputState &in) {
                   !m_uiManager.isInventoryOpen() &&
                       !m_uiManager.isFullscreenMapOpen());
   m_playerRenderer.update(dt, m_player);
-  m_stepEffects.update(m_world, m_player, m_playerRenderer.pollFootfall(), dt);
+  m_stepEffects.update(m_world, m_player, m_playerRenderer.pollFootfall(), dt,
+                       m_run.calendar);
   updateCamera();
 
   // Chunks follow the camera; everything further out is regenerated on
@@ -165,7 +173,7 @@ void OverworldState::render(const InputState &in) {
   BeginTextureMode(m_screenTarget);
   ClearBackground(theme::ocean);
   BeginMode2D(m_camera);
-  m_renderer.renderTerrain(m_world, m_camera, m_canvas, m_totalTime);
+  m_renderer.renderTerrain(m_world, m_camera, m_canvas, m_totalTime, m_run.calendar);
   m_stepEffects.drawFlat();
 
   ViewBounds view = ViewBounds::fromCamera(m_world, m_camera, m_canvas);
@@ -178,7 +186,7 @@ void OverworldState::render(const InputState &in) {
   m_itemRenderer.collect(m_world, m_camera, m_canvas, AreaState::ROOM,
                          m_drawQueue);
   m_renderer.setFocus(m_player.getPosition());
-  m_renderer.collect(m_world, m_camera, m_canvas, m_drawQueue);
+  m_renderer.collect(m_world, m_camera, m_canvas, m_run.calendar, m_drawQueue);
   m_drawQueue.flush();
   EndMode2D();
   EndTextureMode();
@@ -195,7 +203,7 @@ void OverworldState::render(const InputState &in) {
   DrawTexturePro(m_screenTarget.texture, src, dest, {0.0f, 0.0f}, 0.0f, WHITE);
 
   m_uiManager.render(m_player, m_world, m_itemRenderer, false, m_totalTime, in);
-  m_debugOverlay.render(m_player, m_world, m_renderSettings,
+  m_debugOverlay.render(m_player, m_world, m_run.calendar, m_renderSettings,
                         m_uiManager.getUIScale());
 
   if (m_capture) {
@@ -206,6 +214,7 @@ void OverworldState::render(const InputState &in) {
 
 void OverworldState::snapshot(Telemetry &out) const {
   out.world = "overworld";
+  m_run.snapshotClock(out);
   const Vector2 pos = m_player.getPosition();
   out.playerWorldPos = pos;
   out.playerCellX = m_world.toGridX(pos.x);
@@ -260,6 +269,8 @@ void OverworldState::snapshot(Telemetry &out) const {
   out.chunkY = Overworld::chunkOf(out.wrappedCellY);
   out.height = m_world.heightAt(out.playerCellX, out.playerCellY);
   out.biome = biomeId(m_world.biomeAt(out.playerCellX, out.playerCellY));
+  out.celsius = m_world.celsiusAt(out.playerCellX, out.playerCellY, m_run.calendar);
+  out.snow = m_world.snowAt(out.playerCellX, out.playerCellY, m_run.calendar);
   out.nearbyProps.clear();
   const int r = Telemetry::kPropRadius;
   for (int y = out.playerCellY - r; y <= out.playerCellY + r; ++y)

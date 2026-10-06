@@ -17,9 +17,9 @@
 // ============================================================================
 // OverworldState — the surface: walking the island
 // ============================================================================
-// The hub world. Phase 4 builds it up to the maze's level as a WORLD - seeded,
-// rendered, walkable, observable - with no survival systems yet: no day
-// counter, weather or meters, and no way down into the maze (Phase 6).
+// The hub world: seeded, rendered, walkable, observable, and turning through
+// the seasons on the Run's calendar. No survival systems yet - no weather or
+// meters - and no way down into the maze (Phase 6).
 //
 // Borrows the Run's seed and player, exactly like MazeState, so the two
 // states are interchangeable behind GameState. The bag and the hotbar work

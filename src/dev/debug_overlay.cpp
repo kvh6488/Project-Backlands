@@ -3,11 +3,13 @@
 #include "imgui.h"
 #include "items/item.hpp"
 #include "render/overworld_renderer.hpp"
+#include "render/theme.hpp"
 #include "rlImGui.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <iterator>
 
 namespace {
 
@@ -137,19 +139,26 @@ void DebugOverlay::render(Player &player, Maze &maze, RenderSettings &settings,
   });
 }
 
-void DebugOverlay::render(Player &player, Overworld &world,
+void DebugOverlay::render(Player &player, Overworld &world, const Calendar &cal,
                           RenderSettings &settings, float scale) {
   if (!m_visible) {
     return;
   }
+  // The biome and degree views follow the date; recolour every ~2.4 game
+  // hours rather than every frame.
+  const double yearDay = cal.yearDay();
+  if (m_islandView != 1 && std::abs(yearDay - m_islandMapYearDay) >= 0.1)
+    m_islandMapDirty = true;
   if (m_islandTexture.id == 0 || m_islandMapDirty) {
-    generateIslandMap(world);
+    generateIslandMap(world, yearDay);
     m_islandMapDirty = false;
   }
   panel(scale, [&]() {
+    drawCalendarSection(cal);
+    drawClimateSection(player, world, cal);
     drawIslandSection(player, world);
     drawViewSection(settings);
-    drawIslandMapSection(player, world);
+    drawIslandMapSection(player, world, cal);
   });
 }
 
@@ -392,6 +401,92 @@ void DebugOverlay::drawMinimapSection(Player &player, Maze &maze) {
 // ----------------------------------------------------------------------------
 // Overworld sections
 // ----------------------------------------------------------------------------
+void DebugOverlay::drawCalendarSection(const Calendar &cal) {
+  if (!ImGui::CollapsingHeader("Calendar", ImGuiTreeNodeFlags_DefaultOpen)) {
+    return;
+  }
+  ImGui::Indent();
+  static const char *kSeasonNames[] = {"Spring", "Summer", "Autumn", "Winter"};
+  const float hour = cal.timeOfDay();
+  statRow("Day", "%d", cal.day());
+  statRow("Season", "%s, day %d of %d", kSeasonNames[(int)cal.season()],
+          cal.dayOfSeason(), Calendar::kDaysPerSeason);
+  statRow("Time", "%02d:%02d", (int)hour, (int)((hour - (int)hour) * 60.0f));
+  statRow("Year day", "%.2f / %d", cal.yearDay(), Calendar::kDaysPerYear);
+
+  // The whole year on one slider, summer first; dragging scrubs the clock
+  // live. The slider counts days from day 1 of summer.
+  ImGui::Spacing();
+  ImGui::TextDisabled("Year  (summer 0 / autumn 20 / winter 40 / spring 60)");
+  const float year = (float)Calendar::kDaysPerYear;
+  const float start = (float)Calendar::kScrubYearStart;
+  float s = std::fmod((float)cal.yearDay() - start + year, year);
+  char label[48];
+  snprintf(label, sizeof(label), "%s day %d", kSeasonNames[(int)cal.season()],
+           cal.dayOfSeason());
+  ImGui::SetNextItemWidth(-FLT_MIN);
+  if (ImGui::SliderFloat("##year", &s, 0.0f, year - 0.01f, label)) {
+    m_requestYearDay = std::fmod(s + start, year);
+    m_triggerSetYearDay = true;
+  }
+
+  // Each season at its peak, at noon: midsummer, every turning tree in full
+  // colour (none fallen yet), midwinter, and the spring bloom.
+  struct Jump {
+    const char *label;
+    float yearDay;
+  };
+  static constexpr Jump kJumps[] = {
+      {"Summer", 30.5f}, {"Autumn", 54.5f}, {"Winter", 70.5f}, {"Spring", 10.5f}};
+  const float quarter =
+      (ImGui::GetContentRegionAvail().x - 3.0f * ImGui::GetStyle().ItemSpacing.x) / 4.0f;
+  for (int i = 0; i < (int)std::size(kJumps); ++i) {
+    if (i > 0)
+      ImGui::SameLine();
+    if (ImGui::Button(kJumps[i].label, ImVec2(quarter, 0.0f))) {
+      m_requestYearDay = kJumps[i].yearDay;
+      m_triggerSetYearDay = true;
+    }
+  }
+
+  ImGui::Spacing();
+  ImGui::TextDisabled("Clock speed");
+  for (int i = 0; i < (int)std::size(kTimeScales); ++i) {
+    char label[16];
+    snprintf(label, sizeof(label), "x%d", kTimeScales[i]);
+    if (i > 0)
+      ImGui::SameLine();
+    ImGui::RadioButton(label, &m_timeScale, i);
+  }
+  ImGui::TextDisabled("x1440: a day per ~0.6 s, a season in ~12 s");
+
+  ImGui::Unindent();
+  ImGui::Spacing();
+}
+
+void DebugOverlay::drawClimateSection(Player &player, Overworld &world,
+                                      const Calendar &cal) {
+  if (!ImGui::CollapsingHeader("Climate", ImGuiTreeNodeFlags_DefaultOpen)) {
+    return;
+  }
+  ImGui::Indent();
+  const Climate &climate = world.climate();
+  const int px = world.toGridX(player.getPosition().x);
+  const int py = world.toGridY(player.getPosition().y);
+  const float t0 = world.temperatureAt(px, py);
+  statRow("Player", "%.1f C  %s", world.celsiusAt(px, py, cal),
+          world.snowAt(px, py, cal) ? "snow" : world.frozenAt(px, py, cal) ? "ice" : "");
+  ImGui::TextDisabled("    %s  h %.2f  t0 %.3f  mean %.1f C", biomeId(world.biomeAt(px, py)),
+                      world.heightAt(px, py), t0, climate.meanCelsius(t0, cal.yearDay()));
+
+  // Share of all land tiles under snow.
+  ImGui::Spacing();
+  statRow("Snow cover", "%.1f %% of land", 100.0f * climate.landSnowShare(cal.yearDay()));
+
+  ImGui::Unindent();
+  ImGui::Spacing();
+}
+
 void DebugOverlay::drawIslandSection(Player &player, Overworld &world) {
   if (!ImGui::CollapsingHeader("Island", ImGuiTreeNodeFlags_DefaultOpen)) {
     return;
@@ -439,7 +534,8 @@ void DebugOverlay::drawIslandSection(Player &player, Overworld &world) {
   ImGui::Spacing();
 }
 
-void DebugOverlay::drawIslandMapSection(Player &player, Overworld &world) {
+void DebugOverlay::drawIslandMapSection(Player &player, Overworld &world,
+                                        const Calendar &cal) {
   if (!ImGui::CollapsingHeader("Island map", ImGuiTreeNodeFlags_DefaultOpen)) {
     return;
   }
@@ -448,6 +544,8 @@ void DebugOverlay::drawIslandMapSection(Player &player, Overworld &world) {
   bool changed = ImGui::RadioButton("Biomes", &m_islandView, 0);
   ImGui::SameLine();
   changed |= ImGui::RadioButton("Height", &m_islandView, 1);
+  ImGui::SameLine();
+  changed |= ImGui::RadioButton("Degrees", &m_islandView, 2);
   if (changed) {
     m_islandMapDirty = true;
   }
@@ -457,10 +555,22 @@ void DebugOverlay::drawIslandMapSection(Player &player, Overworld &world) {
   rlImGuiImageRect(&m_islandTexture, (int)side, (int)side,
                    Rectangle{0, 0, (float)m_islandTexture.width,
                              (float)m_islandTexture.height});
-  int tx, ty;
+  int tx = 0, ty = 0;
   if (pickTile(mapPos, ImVec2(side, side), world.getWidth(), world.getHeight(),
                tx, ty))
     requestTeleport(tx, ty);
+  if (ImGui::IsItemHovered() && !m_islandSamples.empty()) {
+    // The cached coarse sample under the mouse: no chunk is built.
+    const int n = world.island().map().n, k = IslandConfig::kCoarse;
+    const int cx = std::clamp(tx / k, 0, n - 1), cy = std::clamp(ty / k, 0, n - 1);
+    const TileSample &s = m_islandSamples[cy * n + cx];
+    const Climate &climate = world.climate();
+    ImGui::SetTooltip("(%d, %d)  %s\n%.1f C%s\nclick to teleport", tx, ty,
+                      biomeId(s.biome), climate.celsius(s.temperature, cal),
+                      climate.snow(s.temperature, s.biome, cal.yearDay()) ? "  snow"
+                      : climate.frozen(s.temperature, s.height, s.biome, cal.yearDay()) ? "  ice"
+                                                                                       : "");
+  }
 
   int px = world.wrapX(world.toGridX(player.getPosition().x));
   int py = world.wrapY(world.toGridY(player.getPosition().y));
@@ -472,25 +582,44 @@ void DebugOverlay::drawIslandMapSection(Player &player, Overworld &world) {
   draw->AddCircleFilled(marker, 3.5f, IM_COL32(255, 60, 60, 255));
   draw->AddCircle(marker, 6.0f, IM_COL32(255, 60, 60, 120));
 
-  ImGui::TextDisabled("one pixel = 8x8 tiles; red is you; click to teleport");
-
   ImGui::Unindent();
   ImGui::Spacing();
 }
 
 // Built on the CPU and uploaded once: ~150k pixels as DrawPixel calls into a
 // render texture would be ~150k draw calls.
-void DebugOverlay::generateIslandMap(const Overworld &world) {
+void DebugOverlay::generateIslandMap(const Overworld &world, double yearDay) {
   const Island &island = world.island();
+  const Climate &climate = world.climate();
   const int n = island.map().n;
   const int k = IslandConfig::kCoarse;
+  if (m_islandSamples.size() != (size_t)n * n || m_islandSamplesSeed != island.seed()) {
+    m_islandSamples.resize((size_t)n * n);
+    for (int y = 0; y < n; ++y)
+      for (int x = 0; x < n; ++x)
+        m_islandSamples[y * n + x] = island.sample(x * k + k / 2, y * k + k / 2);
+    m_islandSamplesSeed = island.seed();
+  }
+  m_islandMapYearDay = yearDay;
+  // 4 C bands, cold to hot; the blue/yellow edge is 0 C, the snow line.
+  static constexpr Color kHeat[] = {pal::blue[0],   pal::blue[1],   pal::blue[4],
+                                    pal::blue[7],   pal::blue[9],   pal::yellow[12],
+                                    pal::yellow[10], pal::yellow[9], pal::yellow[7],
+                                    pal::accent[3], pal::accent[2]};
   Image img = GenImageColor(n, n, BLANK);
   for (int y = 0; y < n; ++y) {
     for (int x = 0; x < n; ++x) {
-      TileSample s = island.sample(x * k + k / 2, y * k + k / 2);
+      const TileSample &s = m_islandSamples[y * n + x];
       Color c;
       if (m_islandView == 0) {
-        c = OverworldRenderer::biomeColour(s.biome);
+        c = climate.snow(s.temperature, s.biome, yearDay) ? theme::snow
+            : climate.frozen(s.temperature, s.height, s.biome, yearDay)
+                ? theme::ice
+                : OverworldRenderer::biomeColour(s.biome);
+      } else if (m_islandView == 2) {
+        const float deg = climate.meanCelsius(s.temperature, yearDay);
+        const int band = std::clamp((int)std::floor(deg / 4.0f) + 5, 0, (int)std::size(kHeat) - 1);
+        c = isWater(s.biome) ? Fade(kHeat[band], 0.55f) : kHeat[band];
       } else if (s.height < 0.0f) {
         // Deep to shallow; blue[2] is the teal pine, 3, 5 and 6 the swamp blends.
         static constexpr int kDepth[] = {0, 1, 4};
