@@ -381,7 +381,7 @@ TEST(OverworldRendererTest, SpeciesFollowTheBiome) {
     Id palm = OverworldRenderer::spriteFor(PropType::TREE, Biome::BEACH, (uint8_t)v);
     EXPECT_TRUE(palm == PALM_TALL || palm == PALM_SHORT);
     Id willow = OverworldRenderer::spriteFor(PropType::TREE, Biome::WETLAND, (uint8_t)v);
-    EXPECT_TRUE(willow >= WILLOW_LIT && willow <= WILLOW_S_C);
+    EXPECT_TRUE(willow >= WILLOW && willow <= WILLOW_S_C);
   }
 }
 

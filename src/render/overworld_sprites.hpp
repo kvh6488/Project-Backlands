@@ -102,7 +102,6 @@ enum Id : int {
   PC3_S5_TAN,
   PC3_S5_RUST,
   PC3_S5_BARE,
-  WILLOW_LIT,
   WILLOW,
   WILLOW_S_A,
   WILLOW_S_B,
@@ -160,6 +159,11 @@ enum Id : int {
   DECAL_ICE_B,
   DECAL_SHELL,
   DECAL_SHELL_PINK,
+  DECAL_PEBBLE_SNOW,
+  DECAL_PEBBLES_SNOW,
+  DECAL_STICK,
+  DECAL_MOUND_A,
+  DECAL_MOUND_B,
   COUNT
 };
 
@@ -188,17 +192,17 @@ inline constexpr Frame kFrames[COUNT] = {
     {15, 61, 5, 8, 5}, // FIR_1
     {5, 77, 4, 7, 7}, // FIR_2
     {15, 84, 4, 6, 8}, // FIR_3
-    {4, 96, 3, 4, 10}, // FIR_4
+    {0, 96, 3, 4, 10}, // FIR_4
     {9, 77, 7, 7, 7}, // FIR_DARK_0
     {19, 84, 4, 6, 8}, // FIR_DARK_1
-    {7, 96, 4, 4, 10}, // FIR_DARK_2
-    {35, 96, 3, 3, 10}, // FIR_DARK_3
-    {11, 96, 3, 4, 10}, // PC1_S2_GREEN
-    {14, 96, 3, 4, 10}, // PC1_S2_TAN
-    {38, 96, 2, 3, 10}, // PC1_S2_BARE
-    {0, 101, 2, 3, 11}, // PC1_S2_FROZEN
-    {17, 96, 3, 4, 10}, // PC1_S2_ORANGE
-    {20, 96, 3, 4, 10}, // PC1_S2_AMBER
+    {3, 96, 4, 4, 10}, // FIR_DARK_2
+    {31, 96, 3, 3, 10}, // FIR_DARK_3
+    {7, 96, 3, 4, 10}, // PC1_S2_GREEN
+    {10, 96, 3, 4, 10}, // PC1_S2_TAN
+    {34, 96, 2, 3, 10}, // PC1_S2_BARE
+    {36, 96, 2, 3, 10}, // PC1_S2_FROZEN
+    {13, 96, 3, 4, 10}, // PC1_S2_ORANGE
+    {16, 96, 3, 4, 10}, // PC1_S2_AMBER
     {23, 84, 3, 6, 8}, // PC1_S3_GREEN
     {26, 84, 3, 6, 8}, // PC1_S3_TAN
     {29, 84, 3, 6, 8}, // PC1_S3_BARE
@@ -217,15 +221,15 @@ inline constexpr Frame kFrames[COUNT] = {
     {21, 32, 7, 10, 2}, // PC1_S5_FROZEN
     {28, 32, 7, 10, 2}, // PC1_S5_ORANGE
     {0, 42, 7, 10, 3}, // PC1_S5_AMBER
-    {2, 101, 2, 3, 11}, // PC2_S2_TEAL
-    {4, 101, 2, 3, 11}, // PC2_S2_TEAL_B
-    {6, 101, 2, 3, 11}, // PC2_S2_GREEN
-    {8, 101, 2, 3, 11}, // PC2_S2_GREEN_B
-    {21, 90, 3, 5, 9}, // PC2_S3_TEAL
-    {24, 90, 3, 5, 9}, // PC2_S3_TEAL_B
-    {27, 90, 3, 5, 9}, // PC2_S3_BARE
-    {30, 90, 3, 5, 9}, // PC2_S3_GREEN
-    {33, 90, 3, 5, 9}, // PC2_S3_GREEN_B
+    {38, 96, 2, 3, 10}, // PC2_S2_TEAL
+    {0, 100, 2, 3, 11}, // PC2_S2_TEAL_B
+    {2, 100, 2, 3, 11}, // PC2_S2_GREEN
+    {4, 100, 2, 3, 11}, // PC2_S2_GREEN_B
+    {15, 90, 3, 5, 9}, // PC2_S3_TEAL
+    {18, 90, 3, 5, 9}, // PC2_S3_TEAL_B
+    {21, 90, 3, 5, 9}, // PC2_S3_BARE
+    {24, 90, 3, 5, 9}, // PC2_S3_GREEN
+    {27, 90, 3, 5, 9}, // PC2_S3_GREEN_B
     {16, 77, 4, 7, 7}, // PC2_S4_TEAL
     {20, 77, 4, 7, 7}, // PC2_S4_TEAL_B
     {3, 90, 3, 6, 9}, // PC2_S4_BARE
@@ -236,10 +240,10 @@ inline constexpr Frame kFrames[COUNT] = {
     {19, 42, 6, 10, 3}, // PC2_S5_BARE
     {25, 42, 6, 10, 3}, // PC2_S5_GREEN
     {31, 42, 6, 10, 3}, // PC2_S5_GREEN_B
-    {36, 90, 2, 5, 9}, // PC3_S2_GREEN
-    {38, 90, 2, 5, 9}, // PC3_S2_OLIVE
-    {0, 96, 2, 5, 10}, // PC3_S2_TAN
-    {2, 96, 2, 5, 10}, // PC3_S2_RUST
+    {30, 90, 2, 5, 9}, // PC3_S2_GREEN
+    {32, 90, 2, 5, 9}, // PC3_S2_OLIVE
+    {34, 90, 2, 5, 9}, // PC3_S2_TAN
+    {36, 90, 2, 5, 9}, // PC3_S2_RUST
     {5, 52, 4, 9, 4}, // PC3_S3_GREEN
     {9, 52, 4, 9, 4}, // PC3_S3_OLIVE
     {13, 52, 4, 9, 4}, // PC3_S3_TAN
@@ -255,64 +259,68 @@ inline constexpr Frame kFrames[COUNT] = {
     {18, 0, 9, 16, 0}, // PC3_S5_TAN
     {27, 0, 9, 16, 0}, // PC3_S5_RUST
     {0, 16, 7, 16, 1}, // PC3_S5_BARE
-    {6, 90, 6, 6, 9}, // WILLOW_LIT
-    {12, 90, 6, 6, 9}, // WILLOW
-    {23, 96, 3, 4, 10}, // WILLOW_S_A
-    {26, 96, 3, 4, 10}, // WILLOW_S_B
-    {29, 96, 3, 4, 10}, // WILLOW_S_C
-    {18, 90, 3, 6, 9}, // PALM_TALL
-    {32, 96, 3, 4, 10}, // PALM_SHORT
-    {14, 101, 3, 2, 11}, // BUSH_A
-    {17, 101, 2, 2, 11}, // BUSH_B
-    {19, 101, 3, 2, 11}, // BUSH_C
-    {22, 101, 2, 2, 11}, // BUSH_D
-    {32, 101, 2, 1, 11}, // BUSH_LOW
-    {34, 101, 1, 1, 11}, // BUSH_SMALL
-    {35, 101, 1, 1, 11}, // ROCK_GREY_0
-    {36, 101, 1, 1, 11}, // ROCK_GREY_1
-    {37, 101, 1, 1, 11}, // ROCK_GREY_2
-    {38, 101, 1, 1, 11}, // ROCK_GREY_3
-    {39, 101, 1, 1, 11}, // ROCK_GREY_4
-    {24, 101, 2, 2, 11}, // ROCK_GREY_BIG
-    {0, 104, 1, 1, 12}, // ROCK_MOSS_1
-    {1, 104, 1, 1, 12}, // ROCK_MOSS_2
-    {2, 104, 1, 1, 12}, // ROCK_MOSS_3
-    {10, 101, 2, 3, 11}, // BOULDER_BROWN
-    {26, 101, 2, 2, 11}, // BOULDER_BROWN_LOW
-    {12, 101, 2, 3, 11}, // BOULDER_GREY
-    {28, 101, 2, 2, 11}, // BOULDER_GREY_LOW
-    {30, 101, 1, 2, 11}, // CATTAIL_TALL
-    {31, 101, 1, 2, 11}, // CATTAIL_SHORT
-    {3, 104, 2, 1, 12}, // SWAMP_PLANT
-    {5, 104, 2, 1, 12}, // DECAL_FLOWERS_A
-    {7, 104, 1, 1, 12}, // DECAL_FLOWERS_B
-    {8, 104, 1, 1, 12}, // DECAL_FLOWER
-    {9, 104, 1, 1, 12}, // DECAL_STARS_A
-    {10, 104, 1, 1, 12}, // DECAL_STARS_B
-    {11, 104, 2, 1, 12}, // DECAL_TUFT_A
-    {13, 104, 2, 1, 12}, // DECAL_TUFT_B
-    {15, 104, 1, 1, 12}, // DECAL_PATCH_A
-    {16, 104, 1, 1, 12}, // DECAL_PATCH_B
-    {17, 104, 1, 1, 12}, // DECAL_PATCH_C
-    {18, 104, 1, 1, 12}, // DECAL_TWIGS
-    {19, 104, 2, 1, 12}, // DECAL_FERN
-    {21, 104, 1, 1, 12}, // DECAL_MUSHROOM_RED
-    {22, 104, 1, 1, 12}, // DECAL_MUSHROOM_BROWN
-    {23, 104, 2, 1, 12}, // DECAL_MUSHROOMS
-    {25, 104, 1, 1, 12}, // DECAL_PEBBLE_GREY
-    {26, 104, 1, 1, 12}, // DECAL_PEBBLES_GREY
-    {27, 104, 1, 1, 12}, // DECAL_PEBBLE_MOSS
-    {28, 104, 1, 1, 12}, // DECAL_PEBBLE_BROWN
-    {29, 104, 1, 1, 12}, // DECAL_STONE_WATER_A
-    {30, 104, 1, 1, 12}, // DECAL_STONE_WATER_B
-    {31, 104, 1, 1, 12}, // DECAL_STONE_WATER_C
-    {32, 104, 1, 1, 12}, // DECAL_STONE_WATER_MOSS
-    {33, 104, 2, 1, 12}, // DECAL_DEAD_TUFT_A
-    {35, 104, 2, 1, 12}, // DECAL_DEAD_TUFT_B
-    {37, 104, 1, 1, 12}, // DECAL_ICE_A
-    {38, 104, 1, 1, 12}, // DECAL_ICE_B
-    {39, 104, 1, 1, 12}, // DECAL_SHELL
-    {0, 105, 1, 1, 13}, // DECAL_SHELL_PINK
+    {6, 90, 6, 6, 9}, // WILLOW
+    {19, 96, 3, 4, 10}, // WILLOW_S_A
+    {22, 96, 3, 4, 10}, // WILLOW_S_B
+    {25, 96, 3, 4, 10}, // WILLOW_S_C
+    {12, 90, 3, 6, 9}, // PALM_TALL
+    {28, 96, 3, 4, 10}, // PALM_SHORT
+    {10, 100, 3, 2, 11}, // BUSH_A
+    {13, 100, 2, 2, 11}, // BUSH_B
+    {15, 100, 3, 2, 11}, // BUSH_C
+    {18, 100, 2, 2, 11}, // BUSH_D
+    {28, 100, 2, 1, 11}, // BUSH_LOW
+    {30, 100, 1, 1, 11}, // BUSH_SMALL
+    {31, 100, 1, 1, 11}, // ROCK_GREY_0
+    {32, 100, 1, 1, 11}, // ROCK_GREY_1
+    {33, 100, 1, 1, 11}, // ROCK_GREY_2
+    {34, 100, 1, 1, 11}, // ROCK_GREY_3
+    {35, 100, 1, 1, 11}, // ROCK_GREY_4
+    {20, 100, 2, 2, 11}, // ROCK_GREY_BIG
+    {36, 100, 1, 1, 11}, // ROCK_MOSS_1
+    {37, 100, 1, 1, 11}, // ROCK_MOSS_2
+    {38, 100, 1, 1, 11}, // ROCK_MOSS_3
+    {6, 100, 2, 3, 11}, // BOULDER_BROWN
+    {22, 100, 2, 2, 11}, // BOULDER_BROWN_LOW
+    {8, 100, 2, 3, 11}, // BOULDER_GREY
+    {24, 100, 2, 2, 11}, // BOULDER_GREY_LOW
+    {26, 100, 1, 2, 11}, // CATTAIL_TALL
+    {27, 100, 1, 2, 11}, // CATTAIL_SHORT
+    {0, 103, 2, 1, 12}, // SWAMP_PLANT
+    {2, 103, 2, 1, 12}, // DECAL_FLOWERS_A
+    {4, 103, 1, 1, 12}, // DECAL_FLOWERS_B
+    {5, 103, 1, 1, 12}, // DECAL_FLOWER
+    {6, 103, 1, 1, 12}, // DECAL_STARS_A
+    {7, 103, 1, 1, 12}, // DECAL_STARS_B
+    {8, 103, 2, 1, 12}, // DECAL_TUFT_A
+    {10, 103, 2, 1, 12}, // DECAL_TUFT_B
+    {12, 103, 1, 1, 12}, // DECAL_PATCH_A
+    {13, 103, 1, 1, 12}, // DECAL_PATCH_B
+    {14, 103, 1, 1, 12}, // DECAL_PATCH_C
+    {15, 103, 1, 1, 12}, // DECAL_TWIGS
+    {16, 103, 2, 1, 12}, // DECAL_FERN
+    {18, 103, 1, 1, 12}, // DECAL_MUSHROOM_RED
+    {19, 103, 1, 1, 12}, // DECAL_MUSHROOM_BROWN
+    {20, 103, 2, 1, 12}, // DECAL_MUSHROOMS
+    {22, 103, 1, 1, 12}, // DECAL_PEBBLE_GREY
+    {23, 103, 1, 1, 12}, // DECAL_PEBBLES_GREY
+    {24, 103, 1, 1, 12}, // DECAL_PEBBLE_MOSS
+    {25, 103, 1, 1, 12}, // DECAL_PEBBLE_BROWN
+    {26, 103, 1, 1, 12}, // DECAL_STONE_WATER_A
+    {27, 103, 1, 1, 12}, // DECAL_STONE_WATER_B
+    {28, 103, 1, 1, 12}, // DECAL_STONE_WATER_C
+    {29, 103, 1, 1, 12}, // DECAL_STONE_WATER_MOSS
+    {30, 103, 2, 1, 12}, // DECAL_DEAD_TUFT_A
+    {32, 103, 2, 1, 12}, // DECAL_DEAD_TUFT_B
+    {34, 103, 1, 1, 12}, // DECAL_ICE_A
+    {35, 103, 1, 1, 12}, // DECAL_ICE_B
+    {36, 103, 1, 1, 12}, // DECAL_SHELL
+    {37, 103, 1, 1, 12}, // DECAL_SHELL_PINK
+    {38, 103, 1, 1, 12}, // DECAL_PEBBLE_SNOW
+    {39, 103, 1, 1, 12}, // DECAL_PEBBLES_SNOW
+    {0, 104, 1, 1, 13}, // DECAL_STICK
+    {1, 104, 1, 1, 13}, // DECAL_MOUND_A
+    {2, 104, 1, 1, 13}, // DECAL_MOUND_B
 };
 
 } // namespace owsprite

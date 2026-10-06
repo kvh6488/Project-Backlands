@@ -103,8 +103,8 @@ constexpr Pick kForestTrees[] = {
     {PC3_S3_GREEN, 3},  {PC3_S3_OLIVE, 1},  {PC3_S4_GREEN, 1},   {PC3_S4_OLIVE, 1},
     {PC3_S5_GREEN, 1},  {PC3_S5_OLIVE, 1},  {FIR_0, 2},          {FIR_1, 2},
     {FIR_2, 2},         {PC1_S3_TAN, 1},    {PC3_S3_TAN, 1}};
-constexpr Pick kWetlandTrees[] = {{WILLOW_LIT, 1}, {WILLOW, 2},     {WILLOW_S_A, 2},
-                                  {WILLOW_S_B, 2}, {WILLOW_S_C, 2}};
+constexpr Pick kWetlandTrees[] = {{WILLOW, 2}, {WILLOW_S_A, 2}, {WILLOW_S_B, 2},
+                                  {WILLOW_S_C, 2}};
 constexpr Pick kBeachTrees[] = {{PALM_TALL, 1}, {PALM_SHORT, 1}};
 constexpr Pick kMountainPines[] = {
     {PC2_S2_TEAL, 2},   {PC2_S2_TEAL_B, 2}, {PC2_S2_GREEN, 2},   {PC2_S2_GREEN_B, 2},
@@ -173,8 +173,10 @@ constexpr Pick kWetlandDecals[] = {{DECAL_PATCH_A, 2}, {DECAL_PATCH_C, 2}, {DECA
                                    {DECAL_MUSHROOM_BROWN, 1}, {DECAL_PEBBLE_MOSS, 1}};
 constexpr Pick kMountainDecals[] = {{DECAL_PEBBLE_GREY, 3}, {DECAL_PEBBLES_GREY, 3},
                                     {DECAL_PEBBLE_BROWN, 2}, {DECAL_DEAD_TUFT_B, 1}};
-constexpr Pick kSnowDecals[] = {{DECAL_DEAD_TUFT_A, 3}, {DECAL_DEAD_TUFT_B, 3}, {DECAL_ICE_A, 2},
-                                {DECAL_ICE_B, 2},       {DECAL_PEBBLE_GREY, 1}};
+constexpr Pick kSnowDecals[] = {{DECAL_PEBBLE_SNOW, 3}, {DECAL_PEBBLES_SNOW, 2},
+                                {DECAL_STICK, 2},       {DECAL_MOUND_A, 3},
+                                {DECAL_MOUND_B, 3},     {DECAL_ICE_A, 1},
+                                {DECAL_ICE_B, 1}};
 constexpr Pick kBeachDecals[] = {{DECAL_SHELL, 3}, {DECAL_SHELL_PINK, 2}, {DECAL_PEBBLE_GREY, 1}};
 constexpr Pick kFreshWaterDecals[] = {{DECAL_STONE_WATER_A, 2}, {DECAL_STONE_WATER_B, 2},
                                       {DECAL_STONE_WATER_C, 2}, {DECAL_STONE_WATER_MOSS, 1}};
@@ -192,7 +194,9 @@ DecalOdds decalOdds(Biome b, uint8_t shade) {
   case Biome::MOUNTAIN: return {0.10f, kMountainDecals};
   case Biome::SNOW: return {0.08f, kSnowDecals};
   case Biome::BEACH: return {0.04f, kBeachDecals};
-  case Biome::LAKE: case Biome::RIVER: return {0.015f, kFreshWaterDecals};
+  // Of the water tiles near a shore only (drawDecals): stones in mid-lake
+  // read as litter.
+  case Biome::LAKE: case Biome::RIVER: return {0.01f, kFreshWaterDecals};
   default: return {0.0f, {}};
   }
 }
@@ -307,21 +311,30 @@ void OverworldRenderer::renderTerrain(const Overworld &world,
 }
 
 // Ground details sit flat on the terrain, so they draw here rather than in
-// the DrawQueue. Only on a tile whose row neighbours share its biome - a tuft
-// two tiles wide would otherwise hang over a shore or a biome edge - and
-// never under a prop.
+// the DrawQueue. A detail wider than its tile needs row neighbours of its own
+// biome - a tuft would otherwise hang over a shore or a biome edge - and none
+// goes under a prop. Stones in water keep near a shore.
 void OverworldRenderer::drawDecals(int x0, int y0, int w, int h) const {
   const uint32_t seed = m_world->island().seed();
+  auto nearLand = [&](int x, int y) {
+    for (int dy = -2; dy <= 2; ++dy)
+      for (int dx = -2; dx <= 2; ++dx)
+        if (!isWater(m_world->biomeAt(x + dx, y + dy)))
+          return true;
+    return false;
+  };
   for (int j = 1; j <= h; ++j) {
     for (int i = 1; i <= w; ++i) {
       const Cell &c = m_cells[j * m_cellsW + i];
-      if (m_cells[j * m_cellsW + i - 1].biome != c.biome ||
-          m_cells[j * m_cellsW + i + 1].biome != c.biome)
-        continue;
       const int x = x0 - 1 + i, y = y0 - 1 + j;
       owsprite::Id id = decalFor(c.biome, c.shade,
                                  noise::hash(m_world->wrapX(x), m_world->wrapY(y), seed ^ kDecalSalt));
       if (id == owsprite::COUNT || m_world->propAt(x, y) != PropType::NONE)
+        continue;
+      if (owsprite::kFrames[id].w > 1 && (m_cells[j * m_cellsW + i - 1].biome != c.biome ||
+                                          m_cells[j * m_cellsW + i + 1].biome != c.biome))
+        continue;
+      if (isWater(c.biome) && !nearLand(x, y))
         continue;
       const owsprite::Frame &f = owsprite::kFrames[id];
       Rectangle src = grid::srcTile(f.col, f.row, f.w, f.h);

@@ -186,7 +186,7 @@ PROPS = (
     + boxes("pc3_s4", [("PC3_S4_BARE", (202, 14, 65, 194))])
     + grid_frames("pc3_s5", 128, 256, [["PC3_S5_GREEN", "PC3_S5_OLIVE"], ["PC3_S5_TAN", "PC3_S5_RUST"]])
     + boxes("pc3_s5", [("PC3_S5_BARE", (271, 5, 98, 251))])
-    + boxes("willow", [("WILLOW_LIT", (0, 0, 80, 96)), ("WILLOW", (80, 0, 80, 96)),
+    + boxes("willow", [("WILLOW", (80, 0, 80, 96)),  # x < 80: the lantern-hung willow, not used
                        ("WILLOW_S_A", (16, 96, 48, 64)), ("WILLOW_S_B", (64, 96, 48, 64)), ("WILLOW_S_C", (112, 96, 48, 64))])
     + boxes("palm", [("PALM_TALL", (53, 12, 36, 84)), ("PALM_SHORT", (7, 39, 33, 57))])
     + boxes("lb_bush", [("BUSH_A", (16, 99, 32, 29)), ("BUSH_B", (81, 103, 28, 25)), ("BUSH_C", (16, 147, 32, 29)),
@@ -212,16 +212,59 @@ PROPS = (
                        ("DECAL_STONE_WATER_C", (2, 66, 13, 13)), ("DECAL_STONE_WATER_MOSS", (49, 35, 15, 12))])
     + boxes("gen", [("DECAL_DEAD_TUFT_A", (0, 0, 20, 15)), ("DECAL_DEAD_TUFT_B", (24, 0, 19, 14)),
                     ("DECAL_ICE_A", (48, 0, 14, 7)), ("DECAL_ICE_B", (64, 0, 10, 5)),
-                    ("DECAL_SHELL", (80, 0, 6, 5)), ("DECAL_SHELL_PINK", (88, 0, 5, 4))])
+                    ("DECAL_SHELL", (80, 0, 6, 5)), ("DECAL_SHELL_PINK", (88, 0, 5, 4)),
+                    ("DECAL_PEBBLE_SNOW", (96, 0, 10, 8)), ("DECAL_PEBBLES_SNOW", (112, 0, 14, 11)),
+                    ("DECAL_STICK", (128, 0, 12, 5)), ("DECAL_MOUND_A", (144, 0, 14, 7)),
+                    ("DECAL_MOUND_B", (160, 0, 10, 5))])
 )
+# Per-sprite recolours after quantizing. Pixel Crawler's broadleaf greens
+# are a lime that glows against every other tree: one step darker each.
+PROP_RECOLOUR = {f"PC1_S{s}_GREEN": {"#91ca51": "#69a754", "#69a754": "#55834c"} for s in (2, 3, 4, 5)}
 ATLAS_TILES = 40  # atlas width in tiles
 
 
+def snow_cap(rock):
+    """A pebble under snow: each column's top three pixels become a pale
+    outline, snow, and the snow's shadow."""
+    out = rock.copy()
+    out[out[..., 3] < 128] = 0
+    for x in range(out.shape[1]):
+        ys = np.nonzero(out[:, x, 3] > 0)[0]
+        for k, y in enumerate(ys[:3]):
+            out[y, x, :3] = hexrgb(("#a6b7c6", "#dfe3ed", "#bdd5de")[k])
+    return out
+
+
+def snow_mound(w, h):
+    """A small heap of snow. Its top is the ground's own white, so it shows
+    only by its shaded side and a darker foot."""
+    yy, xx = np.mgrid[0:h, 0:w]
+    u, v = (xx - (w - 1) / 2) / (w / 2), (yy - (h - 1) / 2) / (h / 2)
+    inside = u * u + v * v <= 1.0
+    below = np.zeros_like(inside)
+    below[:-1] = inside[1:]
+    a = np.zeros((h, w, 4), np.uint8)
+    a[inside & (u + 0.7 * v > 0.45)] = (*hexrgb("#bdd5de"), 255)
+    a[inside & ~below & (v > 0)] = (*hexrgb("#bdd5de"), 255)
+    a[inside & ~below & (v > 0.4) & (u > -0.3)] = (*hexrgb("#a6b7c6"), 255)
+    return a
+
+
+def pixels(rows, colours):
+    """A tiny sprite from strings; '.' (or any unlisted char) is clear."""
+    a = np.zeros((len(rows), len(rows[0]), 4), np.uint8)
+    for y, row in enumerate(rows):
+        for x, c in enumerate(row):
+            if c in colours:
+                a[y, x] = (*hexrgb(colours[c]), 255)
+    return a
+
+
 def generated_decals(src):
-    """Decals no pack draws: dead grass poking through snow (LightBorne's
-    tufts, each green moved to the straw tan of the same lightness), ice
-    patches, and two beach shells."""
-    g = np.zeros((16, 96, 4), np.uint8)
+    """Decals no pack draws: dead grass (LightBorne's tufts, each green moved
+    to the straw tan of the same lightness), ice patches, two beach shells,
+    and the snow set - snow-capped pebbles, a fallen stick, snow mounds."""
+    g = np.zeros((16, 176, 4), np.uint8)
     straw = [hexrgb(h) for h in ("#544527", "#74653c", "#96894e", "#b4ac6a")]
     straw_L = srgb_to_oklab(np.array(straw, np.uint8))[:, 0]
     for (x0, y0, w, h), dx in (((14, 64, 20, 15), 0), ((15, 80, 19, 14), 24)):
@@ -255,6 +298,13 @@ def generated_decals(src):
             if c == "#":
                 pk[y, x] = (*(pink if y < 2 else shade), 255)
     g[0:4, 88:93] = pk
+    for (x0, y0, w, h), dx in (((3, 7, 10, 8), 96), ((17, 4, 14, 11), 112)):
+        g[0:h, dx:dx + w] = snow_cap(src["lb_rock"][y0:y0 + h, x0:x0 + w])
+    g[0:5, 128:140] = pixels(("......L.....", ".....D......", "LLLLLDLLLL..",
+                              "DDDDDDDDDDLL", ".sssssssss.."),
+                             {"L": "#7d4c2e", "D": "#4a2a19", "s": "#bdd5de"})
+    g[0:7, 144:158] = snow_mound(14, 7)
+    g[0:5, 160:170] = snow_mound(10, 5)
     return g
 
 
@@ -548,6 +598,8 @@ def props_atlas(src):
         a = src[sheet][y0:y1, x0:x1].copy()
         a[a[..., 3] < 128] = 0  # LightBorne's faint drop shadows read as a box halo
         a = main_body(a)
+        if name in PROP_RECOLOUR:
+            a = recolour(a, PROP_RECOLOUR[name])
         ys, xs = np.nonzero(a[..., 3] > 0)
         a = a[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
         h, w = a.shape[:2]
