@@ -117,10 +117,12 @@ void OverworldState::update(float dt, const InputState &in) {
   updateCamera();
 
   // Chunks follow the camera; everything further out is regenerated on
-  // demand if the player comes back.
-  m_world.retainAround(m_world.toGridX(m_player.getPosition().x),
-                       m_world.toGridY(m_player.getPosition().y),
-                       kRetainChunks);
+  // demand if the player comes back. One chunk a tick is built ahead, so
+  // walking never builds several inside one frame.
+  const int px = m_world.toGridX(m_player.getPosition().x);
+  const int py = m_world.toGridY(m_player.getPosition().y);
+  m_world.retainAround(px, py, kRetainChunks);
+  m_world.prefetchAround(px, py, kPrefetchChunks, 1);
 
   // Player events (trip stages, maps) are maze-side: they stay raised until
   // MazeState drains them.

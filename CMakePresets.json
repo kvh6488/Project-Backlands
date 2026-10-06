@@ -5,7 +5,7 @@
     {
       "name": "mingw-debug",
       "displayName": "MinGW Debug",
-      "description": "The one supported configuration. Pins the generator so a VS-bundled cmake cannot rewrite the cache.",
+      "description": "The default configuration. Pins the generator so a VS-bundled cmake cannot rewrite the cache.",
       "generator": "MinGW Makefiles",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
@@ -22,14 +22,24 @@
       "displayName": "MinGW Debug (agent)",
       "description": "The same build in build-agent/, so an AI agent can build while the game in build/ is running.",
       "binaryDir": "${sourceDir}/build-agent"
+    },
+    {
+      "name": "mingw-release",
+      "inherits": "mingw-debug",
+      "displayName": "MinGW Release",
+      "description": "Optimised, in build-release/. Play-test and judge performance here: Debug runs the overworld ~2.5x slower.",
+      "binaryDir": "${sourceDir}/build-release",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
     }
   ],
   "buildPresets": [
     { "name": "mingw-debug", "configurePreset": "mingw-debug", "jobs": 0 },
-    { "name": "mingw-agent", "configurePreset": "mingw-agent", "jobs": 0 }
+    { "name": "mingw-agent", "configurePreset": "mingw-agent", "jobs": 0 },
+    { "name": "mingw-release", "configurePreset": "mingw-release", "jobs": 0 }
   ],
   "testPresets": [
     { "name": "mingw-debug", "configurePreset": "mingw-debug", "output": { "outputOnFailure": true } },
-    { "name": "mingw-agent", "configurePreset": "mingw-agent", "output": { "outputOnFailure": true } }
+    { "name": "mingw-agent", "configurePreset": "mingw-agent", "output": { "outputOnFailure": true } },
+    { "name": "mingw-release", "configurePreset": "mingw-release", "output": { "outputOnFailure": true } }
   ]
 }

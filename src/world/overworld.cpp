@@ -1,6 +1,5 @@
 #include "world/overworld.hpp"
 #include "core/grid.hpp"
-#include "world/generators/poisson.hpp"
 #include "world/shoreline.hpp"
 #include <cstdlib>
 #include <deque>
@@ -103,28 +102,20 @@ Overworld::Chunk Overworld::build(int cx, int cy) const {
   c.propIndex.fill(-1);
 
   // Candidate points for this chunk and its neighbours, the neighbours'
-  // shifted into this chunk's frame. A chunk's seed is its wrapped key, so
-  // every chunk regenerates the same points for a given neighbour.
-  const uint32_t seed = m_island.seed();
-  auto candidates = [&](int ncx, int ncy) {
-    return poisson::sample((float)kChunk, (float)kChunk, kPropSpacing,
-                           noise::hash(ncx, ncy, seed ^ 0x2545f491u));
-  };
+  // shifted into this chunk's frame.
   const int myKey = chunkKey(cx, cy);
   std::vector<poisson::Point> rivals; // points of higher-priority neighbours
   for (int dy = -1; dy <= 1; ++dy) {
     for (int dx = -1; dx <= 1; ++dx) {
       if ((dx == 0 && dy == 0) || chunkKey(cx + dx, cy + dy) > myKey)
         continue;
-      int nx = (cx + dx + m_chunksAcross) % m_chunksAcross;
-      int ny = (cy + dy + m_chunksAcross) % m_chunksAcross;
-      for (poisson::Point p : candidates(nx, ny))
+      for (poisson::Point p : points(cx + dx, cy + dy))
         rivals.push_back({p.x + dx * kChunk, p.y + dy * kChunk});
     }
   }
 
   const int sx = spawnX(), sy = spawnY();
-  for (poisson::Point p : candidates(cx, cy)) {
+  for (poisson::Point p : points(cx, cy)) {
     bool yields = false;
     for (const poisson::Point &q : rivals) {
       float ddx = p.x - q.x, ddy = p.y - q.y;
@@ -152,6 +143,21 @@ Overworld::Chunk Overworld::build(int cx, int cy) const {
 
   applyChanges(cx, cy, c);
   return c;
+}
+
+// A chunk's seed is its wrapped position, so every build reads the same points
+// for a given neighbour. The reference stays valid until retainAround evicts
+// the set: unordered_map never moves an element on insert.
+const std::vector<poisson::Point> &Overworld::points(int cx, int cy) const {
+  const int key = chunkKey(cx, cy);
+  auto it = m_points.find(key);
+  if (it != m_points.end())
+    return it->second;
+  const int wx = key % m_chunksAcross, wy = key / m_chunksAcross;
+  return m_points
+      .emplace(key, poisson::sample((float)kChunk, (float)kChunk, kPropSpacing,
+                                    noise::hash(wx, wy, m_island.seed() ^ 0x2545f491u)))
+      .first->second;
 }
 
 void Overworld::applyChanges(int cx, int cy, Chunk &c) const {
@@ -232,16 +238,26 @@ bool Overworld::removeProp(int x, int y) {
 void Overworld::retainAround(int x, int y, int radius) {
   const int n = m_chunksAcross;
   const int ccx = ((chunkOf(x) % n) + n) % n, ccy = ((chunkOf(y) % n) + n) % n;
-  for (auto it = m_chunks.begin(); it != m_chunks.end();) {
-    int kx = it->first % n, ky = it->first / n;
-    int dx = std::abs(kx - ccx), dy = std::abs(ky - ccy);
-    dx = std::min(dx, n - dx);
-    dy = std::min(dy, n - dy);
-    if (std::max(dx, dy) > radius)
-      it = m_chunks.erase(it);
-    else
-      ++it;
-  }
+  auto beyond = [&](int key, int r) {
+    int dx = std::abs(key % n - ccx), dy = std::abs(key / n - ccy);
+    return std::max(std::min(dx, n - dx), std::min(dy, n - dy)) > r;
+  };
+  std::erase_if(m_chunks, [&](const auto &kv) { return beyond(kv.first, radius); });
+  std::erase_if(m_points, [&](const auto &kv) { return beyond(kv.first, radius + 1); });
+}
+
+int Overworld::prefetchAround(int x, int y, int radius, int budget) {
+  const int cx = chunkOf(x), cy = chunkOf(y);
+  int built = 0;
+  for (int r = 0; r <= radius && built < budget; ++r)
+    for (int dy = -r; dy <= r && built < budget; ++dy)
+      for (int dx = -r; dx <= r && built < budget; ++dx)
+        if (std::max(std::abs(dx), std::abs(dy)) == r &&
+            !m_chunks.count(chunkKey(cx + dx, cy + dy))) {
+          chunk(cx + dx, cy + dy);
+          ++built;
+        }
+  return built;
 }
 
 bool Overworld::isSolid(int x, int y) const {

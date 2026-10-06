@@ -57,6 +57,10 @@ public:
 
   // Chunks further than this from the camera are dropped from the cache.
   static constexpr int kRetainChunks = 3;
+  // Chunks this near are built ahead, one per tick. The view reaches under two
+  // chunks from the player, and this stays inside kRetainChunks, so a
+  // prefetched chunk is never evicted before it is drawn.
+  static constexpr int kPrefetchChunks = 2;
 
 private:
   void handleInput(const InputState &in);

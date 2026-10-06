@@ -535,6 +535,18 @@ TEST(OverworldTest, CacheIsBoundedByTheViewNotTheWorld) {
   }
 }
 
+TEST(OverworldTest, PrefetchBuildsNearestFirstWithinItsBudget) {
+  Overworld w(kSeed);
+  const int x = w.spawnX(), y = w.spawnY();
+  EXPECT_EQ(w.prefetchAround(x, y, 2, 1), 1);
+  EXPECT_EQ(w.cachedChunkCount(), 1);
+  // The first chunk built is the player's own: reading it builds nothing.
+  w.biomeAt(x, y);
+  EXPECT_EQ(w.cachedChunkCount(), 1);
+  EXPECT_EQ(w.prefetchAround(x, y, 2, 100), 24);
+  EXPECT_EQ(w.prefetchAround(x, y, 2, 100), 0);
+}
+
 TEST(OverworldTest, ItemLayerAndDrops) {
   ItemDatabase::init();
   Overworld w(kSeed);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "world/generators/poisson.hpp"
 #include "world/island.hpp"
 #include "world/world.hpp"
 #include <array>
@@ -59,6 +60,14 @@ struct Prop {
 // that neighbour has priority (lower chunk index). Whichever chunk is built
 // first, both sides agree on who yields, so the spacing holds across borders
 // and no chunk depends on another's build order.
+//
+// COST. Sampling is ~70 % of a chunk build, and each chunk's points are read
+// by up to five builds (its own and four neighbours'), so point sets are
+// memoised by chunk key, apart from the chunks - a set depends only on
+// (seed, chunk). And a chunk is built in the tick that first needs it, so
+// prefetchAround builds the ring just outside the view one chunk per tick
+// ahead of the player: a border crossing finds its chunks already there
+// instead of building two or three inside one frame.
 // ============================================================================
 class Overworld final : public World {
 public:
@@ -96,8 +105,13 @@ public:
 
   // Drops cached chunks more than `radius` chunks (Chebyshev, wrap-aware)
   // from the chunk holding tile (x, y). They regenerate identically on demand.
+  // Point sets are kept one chunk further, for the neighbour reads.
   void retainAround(int x, int y, int radius);
   int cachedChunkCount() const { return (int)m_chunks.size(); }
+
+  // Builds up to `budget` uncached chunks within `radius` (Chebyshev) of the
+  // chunk holding tile (x, y), nearest ring first. Returns how many it built.
+  int prefetchAround(int x, int y, int radius, int budget);
 
   // Floor division: tile -1 is in chunk -1, not chunk 0.
   static int chunkOf(int tile) {
@@ -132,6 +146,7 @@ private:
   int chunkKey(int cx, int cy) const;
   const Chunk &chunk(int cx, int cy) const;
   Chunk build(int cx, int cy) const;
+  const std::vector<poisson::Point> &points(int cx, int cy) const;
   void applyChanges(int cx, int cy, Chunk &c) const;
   PropType rollProp(Biome b, uint8_t shade, int x, int y, uint8_t &variant) const;
 
@@ -141,6 +156,8 @@ private:
   // A cache: filling it on a const query does not change what the world IS,
   // which is why it may be mutable.
   mutable std::unordered_map<int, Chunk> m_chunks;
+  // Each chunk's Poisson candidates, in its own frame, by chunk key.
+  mutable std::unordered_map<int, std::vector<poisson::Point>> m_points;
 
   // The change record: tiles whose generated prop the player removed. Placed
   // props (a campfire, a shelter) will join it as a second map when they exist.
